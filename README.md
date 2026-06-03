@@ -1,3 +1,16 @@
+    // go into any VPS
+    // install bun
+    $ curl -fsSL https://bun.sh/install | bash
+    // install zig, ghostty-web-for-brow6el need the fixed version 0.15.2
+    $ wget https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
+    
+    $ git clone https://github.com/diyism/ghostty-web-for-brow6el
+    $ cd ghostty-web-for-brow6el
+    $ bun install
+    $ cd demo ; bun install; cd ..
+    $ bun run build
+    $ PORT=8080 bun --bun run demo
+
 # ghostty-web
 
 [![NPM Version](https://img.shields.io/npm/v/ghostty-web)](https://npmjs.com/package/ghostty-web) [![NPM Downloads](https://img.shields.io/npm/dw/ghostty-web)](https://npmjs.com/package/ghostty-web) [![npm bundle size](https://img.shields.io/bundlephobia/minzip/ghostty-web)](https://npmjs.com/package/ghostty-web) [![license](https://img.shields.io/github/license/coder/ghostty-web)](./LICENSE)
