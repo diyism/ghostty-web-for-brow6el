@@ -1,6 +1,6 @@
     // forked from: https://github.com/NimbleMarkets/ghostty-web/tree/nm-webgpu
 
-    // go into debian VPS
+    // ssh into your debian VPS
     
     // install tailscale
     $ sudo apt install tailscale
