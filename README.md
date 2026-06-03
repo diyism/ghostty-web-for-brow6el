@@ -8,8 +8,18 @@
     $ tailscale ip
 
     // install brow6el
-    $ wget https://www.brow6el.dev/appimage/brow6el-x86_64.AppImage
-    $ sudo install ./brow6el-x86_64.AppImage /usr/bin/brow6el
+    # appimage failed:
+    # $ wget https://www.brow6el.dev/appimage/brow6el-x86_64.AppImage
+    # $ sudo install ./brow6el-x86_64.AppImage /usr/bin/brow6el
+    $ git clone https://github.com/diyism/broxel
+    $ cd broxel
+    $ sudo apt install -y cmake build-essential pkg-config
+    $ sudo apt install -y libsixel-dev libx11-dev
+    $ ./download_cef.sh
+    $ ./build.sh
+    $ sudo mv ./build /opt/brow6el
+    $ sudo ln -s /opt/brow6el/run_brow6el.sh /usr/bin/brow6el
+    $ brow6el https://www.google.com/ncr
 
     // install bun
     $ curl -fsSL https://bun.sh/install | bash
