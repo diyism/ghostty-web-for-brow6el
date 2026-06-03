@@ -1,3 +1,5 @@
+    // forked from: https://github.com/NimbleMarkets/ghostty-web  
+
     // go into any VPS
     // install tailscale
     $ sudo apt install tailscale
