@@ -20,6 +20,8 @@
     // in your phone (installed tailscale app)
     // open http://<vps tailscale ip>:8080
 
+![](./screenshot.png)
+
 # ghostty-web
 
 [![NPM Version](https://img.shields.io/npm/v/ghostty-web)](https://npmjs.com/package/ghostty-web) [![NPM Downloads](https://img.shields.io/npm/dw/ghostty-web)](https://npmjs.com/package/ghostty-web) [![npm bundle size](https://img.shields.io/bundlephobia/minzip/ghostty-web)](https://npmjs.com/package/ghostty-web) [![license](https://img.shields.io/github/license/coder/ghostty-web)](./LICENSE)
