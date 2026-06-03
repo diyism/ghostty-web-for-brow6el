@@ -1,4 +1,4 @@
-    // forked from: https://github.com/NimbleMarkets/ghostty-web  
+    // forked from: https://github.com/NimbleMarkets/ghostty-web/tree/nm-webgpu
 
     // go into any VPS
     // install tailscale
