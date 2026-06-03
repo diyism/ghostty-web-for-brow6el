@@ -1,6 +1,6 @@
     // forked from: https://github.com/NimbleMarkets/ghostty-web/tree/nm-webgpu
 
-    // go into any VPS
+    // go into debian VPS
     // install tailscale
     $ sudo apt install tailscale
     $ tailscale up
@@ -9,6 +9,9 @@
     $ curl -fsSL https://bun.sh/install | bash
     // install zig, ghostty-web-for-brow6el need the fixed version 0.15.2
     $ wget https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
+    $ tar -xf zig-x86_64-linux-0.15.2.tar.xz
+    $ sudo mv zig-x86_64-linux-0.15.2 /opt/zig
+    $ sudo ln -s /opt/zig/zig /usr/local/bin/zig
     
     $ git clone https://github.com/diyism/ghostty-web-for-brow6el
     $ cd ghostty-web-for-brow6el
