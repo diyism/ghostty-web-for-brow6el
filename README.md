@@ -19,6 +19,7 @@
 
     // in your phone (installed tailscale app)
     // open http://<vps tailscale ip>:8080
+    // type in: brow6el https://www.google.com/ncr
 
 ![](./screenshot.png)
 
