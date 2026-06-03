@@ -1,0 +1,1 @@
+# ghostty-web-for-brow6el
