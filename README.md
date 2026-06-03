@@ -42,6 +42,8 @@
     // open http://<vps tailscale ip>:8080
     // type in: brow6el https://www.google.com/ncr
 
+    // in your debian PC, need no ghostty-web, use wezterm + ssh, and run "brow6el https://www.google.com/ncr"
+
 ![](./screenshot.png)
 
 # ghostty-web
