@@ -1,0 +1,23 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 0,
+  "workspaces": {
+    "": {
+      "name": "@ghostty-web/demo",
+      "dependencies": {
+        "ghostty-web": "latest",
+        "node-pty": "1.2.0-beta.12",
+        "ws": "^8.18.0",
+      },
+    },
+  },
+  "packages": {
+    "ghostty-web": ["ghostty-web@0.2.1", "", {}, "sha512-wrovbPlHcl+nIkp7S7fY7vOTsmBjwMFihZEe2PJe/M6G4/EwuyJnwaWTTzNfuY7RcM/lVlN+PvGWqJIhKSB5hw=="],
+
+    "node-addon-api": ["node-addon-api@7.1.1", "", {}, "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ=="],
+
+    "node-pty": ["node-pty@1.2.0-beta.12", "", { "dependencies": { "node-addon-api": "^7.1.0" } }, "sha512-uExTCG/4VmSJa4+TjxFwPXv8BfacmfFEBL6JpxCMDghcwqzvD0yTcGmZ1fKOK6HY33tp0CelLblqTECJizc+Yw=="],
+
+    "ws": ["ws@8.18.3", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg=="],
+  }
+}
