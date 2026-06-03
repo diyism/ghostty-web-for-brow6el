@@ -6,11 +6,15 @@
     $ sudo apt install tailscale
     $ tailscale up
     $ tailscale ip
-    
+
+    // install brow6el
+    $ wget https://www.brow6el.dev/appimage/brow6el-x86_64.AppImage
+    $ sudo install ./brow6el-x86_64.AppImage /usr/bin/brow6el
+
     // install bun
     $ curl -fsSL https://bun.sh/install | bash
     $ source ~/.bashrc
-    
+
     // install zig, ghostty-web-for-brow6el need the fixed version 0.15.2
     $ wget https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
     $ tar -xf zig-x86_64-linux-0.15.2.tar.xz
