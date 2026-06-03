@@ -1,4 +1,8 @@
     // go into any VPS
+    // install tailscale
+    $ sudo apt install tailscale
+    $ tailscale up
+    $ tailscale ip
     // install bun
     $ curl -fsSL https://bun.sh/install | bash
     // install zig, ghostty-web-for-brow6el need the fixed version 0.15.2
@@ -10,6 +14,9 @@
     $ cd demo ; bun install; cd ..
     $ bun run build
     $ PORT=8080 bun --bun run demo
+
+    // in your phone (installed tailscale app)
+    // open http://<vps tailscale ip>:8080
 
 # ghostty-web
 
