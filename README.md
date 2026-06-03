@@ -8,9 +8,9 @@
     $ tailscale ip
 
     // install brow6el
-    # appimage failed:
-    # $ wget https://www.brow6el.dev/appimage/brow6el-x86_64.AppImage
-    # $ sudo install ./brow6el-x86_64.AppImage /usr/bin/brow6el
+    // appimage failed:
+    // $ wget https://www.brow6el.dev/appimage/brow6el-x86_64.AppImage
+    // $ sudo install ./brow6el-x86_64.AppImage /usr/bin/brow6el
     $ git clone https://github.com/diyism/broxel
     $ cd broxel
     $ sudo apt install -y cmake build-essential pkg-config
