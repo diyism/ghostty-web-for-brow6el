@@ -104,7 +104,7 @@ describe('Terminal', () => {
 
     test('cannot write after disposal', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
       term.dispose();
 
       expect(() => term.write('test')).toThrow('Terminal has been disposed');
@@ -112,9 +112,9 @@ describe('Terminal', () => {
 
     test('cannot open twice', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
-      // open() throws synchronously before doing any async work
+      // open() is synchronous and throws immediately
       expect(() => term.open(container!)).toThrow('already open');
 
       term.dispose();
@@ -124,7 +124,7 @@ describe('Terminal', () => {
       const term = await createIsolatedTerminal();
       term.dispose();
 
-      // open() throws synchronously before doing any async work
+      // open() is synchronous and throws immediately
       expect(() => term.open(container!)).toThrow('has been disposed');
     });
   });
@@ -140,7 +140,7 @@ describe('Terminal', () => {
       const term = await createIsolatedTerminal();
       expect(term.element).toBeUndefined();
 
-      await term.open(container!);
+      term.open(container!);
       expect(term.element).toBe(container);
 
       term.dispose();
@@ -172,9 +172,37 @@ describe('Terminal', () => {
       disposable.dispose();
     });
 
+    test('emits terminal query responses through onData by default', async () => {
+      const term = await createIsolatedTerminal();
+      term.open(container!);
+
+      const receivedData: string[] = [];
+      term.onData((data) => receivedData.push(data));
+
+      term.write('\x1b[5n');
+
+      expect(receivedData).toContain('\x1b[0n');
+
+      term.dispose();
+    });
+
+    test('can keep terminal query responses out of onData', async () => {
+      const term = await createIsolatedTerminal({ emitTerminalResponses: false });
+      term.open(container!);
+
+      const receivedData: string[] = [];
+      term.onData((data) => receivedData.push(data));
+
+      term.write('\x1b[5n');
+
+      expect(receivedData).toEqual([]);
+
+      term.dispose();
+    });
+
     test('onResize fires when terminal is resized', async () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
-      await term.open(container!);
+      term.open(container!);
 
       let resizeEvent: { cols: number; rows: number } | null = null;
       term.onResize((e) => {
@@ -192,7 +220,7 @@ describe('Terminal', () => {
 
     test('onBell fires on bell character', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       let bellFired = false;
       term.onBell(() => {
@@ -213,7 +241,7 @@ describe('Terminal', () => {
   describe('Writing', () => {
     test('write() does not throw after open', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => term.write('Hello, World!')).not.toThrow();
 
@@ -222,7 +250,7 @@ describe('Terminal', () => {
 
     test('write() accepts string', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => term.write('test string')).not.toThrow();
 
@@ -231,7 +259,7 @@ describe('Terminal', () => {
 
     test('write() accepts Uint8Array', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       const data = new TextEncoder().encode('test');
       expect(() => term.write(data)).not.toThrow();
@@ -241,7 +269,7 @@ describe('Terminal', () => {
 
     test('writeln() adds newline', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => term.writeln('test line')).not.toThrow();
 
@@ -252,7 +280,7 @@ describe('Terminal', () => {
   describe('Resizing', () => {
     test('resize() updates dimensions', async () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
-      await term.open(container!);
+      term.open(container!);
 
       term.resize(100, 30);
 
@@ -264,7 +292,7 @@ describe('Terminal', () => {
 
     test('resize() with same dimensions is no-op', async () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
-      await term.open(container!);
+      term.open(container!);
 
       let resizeCount = 0;
       term.onResize(() => resizeCount++);
@@ -276,16 +304,20 @@ describe('Terminal', () => {
       term.dispose();
     });
 
-    test('resize() throws if not open', async () => {
+    test('resize() works before open (headless-compatible)', async () => {
       const term = await createIsolatedTerminal();
-      expect(() => term.resize(100, 30)).toThrow('must be opened');
+      // Resize should work before open() - the WASM terminal exists
+      term.resize(100, 30);
+      expect(term.cols).toBe(100);
+      expect(term.rows).toBe(30);
+      term.dispose();
     });
   });
 
   describe('Control Methods', () => {
     test('clear() does not throw', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => term.clear()).not.toThrow();
 
@@ -294,7 +326,7 @@ describe('Terminal', () => {
 
     test('reset() does not throw', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => term.reset()).not.toThrow();
 
@@ -303,7 +335,7 @@ describe('Terminal', () => {
 
     test('focus() does not throw', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => term.focus()).not.toThrow();
 
@@ -319,7 +351,7 @@ describe('Terminal', () => {
   describe('Addons', () => {
     test('loadAddon() accepts addon', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       const mockAddon = {
         activate: (terminal: any) => {
@@ -337,7 +369,7 @@ describe('Terminal', () => {
 
     test('loadAddon() calls activate', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       let activateCalled = false;
       const mockAddon = {
@@ -356,7 +388,7 @@ describe('Terminal', () => {
 
     test('dispose() calls addon dispose', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       let disposeCalled = false;
       const mockAddon = {
@@ -376,7 +408,7 @@ describe('Terminal', () => {
   describe('Integration', () => {
     test('can write ANSI sequences', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       // Should not throw on ANSI escape sequences
       expect(() => term.write('\x1b[1;31mRed bold text\x1b[0m')).not.toThrow();
@@ -388,7 +420,7 @@ describe('Terminal', () => {
 
     test('can handle cursor movement sequences', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => term.write('\x1b[5;10H')).not.toThrow(); // Move cursor
       expect(() => term.write('\x1b[2A')).not.toThrow(); // Move up 2
@@ -399,7 +431,7 @@ describe('Terminal', () => {
 
     test('multiple write calls work', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => {
         term.write('Line 1\r\n');
@@ -414,7 +446,7 @@ describe('Terminal', () => {
   describe('Disposal', () => {
     test('dispose() can be called multiple times', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       term.dispose();
       expect(() => term.dispose()).not.toThrow();
@@ -422,7 +454,7 @@ describe('Terminal', () => {
 
     test('dispose() cleans up canvas element', async () => {
       const term = await createIsolatedTerminal();
-      await term.open(container!);
+      term.open(container!);
 
       const initialChildCount = container.children.length;
       expect(initialChildCount).toBeGreaterThan(0);
@@ -457,7 +489,7 @@ describe('paste()', () => {
       if (!container) return;
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let receivedData = '';
       term.onData((data) => {
@@ -474,7 +506,7 @@ describe('paste()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24, disableStdin: true });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let receivedData = '';
       term.onData((data) => {
@@ -517,7 +549,7 @@ describe('blur()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       expect(() => term.blur()).not.toThrow();
       term.dispose();
@@ -533,7 +565,7 @@ describe('blur()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       const blurSpy = { called: false };
       if (term.element) {
@@ -573,7 +605,7 @@ describe('input()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       term.input('test data');
 
@@ -587,7 +619,7 @@ describe('input()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let receivedData = '';
       term.onData((data) => {
@@ -604,7 +636,7 @@ describe('input()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let receivedData = '';
       term.onData((data) => {
@@ -621,7 +653,7 @@ describe('input()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24, disableStdin: true });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let receivedData = '';
       term.onData((data) => {
@@ -658,7 +690,7 @@ describe('select()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       term.select(0, 0, 10);
 
@@ -670,7 +702,7 @@ describe('select()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       // Select 100 chars starting at column 0 (wraps to next line)
       term.select(0, 0, 100);
@@ -686,7 +718,7 @@ describe('select()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let fired = false;
       term.onSelectionChange(() => {
@@ -703,7 +735,7 @@ describe('select()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       // Create a selection
       term.select(0, 0, 10);
@@ -746,7 +778,7 @@ describe('selectLines()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       term.selectLines(0, 2);
 
@@ -763,7 +795,7 @@ describe('selectLines()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       term.selectLines(5, 2); // End before start
 
@@ -778,7 +810,7 @@ describe('selectLines()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let fired = false;
       term.onSelectionChange(() => {
@@ -815,7 +847,7 @@ describe('getSelectionPosition()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       const pos = term.getSelectionPosition();
 
@@ -827,7 +859,7 @@ describe('getSelectionPosition()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       term.select(5, 3, 10);
       const pos = term.getSelectionPosition();
@@ -842,7 +874,7 @@ describe('getSelectionPosition()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       term.select(0, 0, 10);
       term.clearSelection();
@@ -876,7 +908,7 @@ describe('onKey event', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       expect(term.onKey).toBeTruthy();
       expect(typeof term.onKey).toBe('function');
@@ -887,7 +919,7 @@ describe('onKey event', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let keyEvent: any = null;
       term.onKey((e) => {
@@ -928,7 +960,7 @@ describe('onTitleChange event', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       expect(term.onTitleChange).toBeTruthy();
       expect(typeof term.onTitleChange).toBe('function');
@@ -939,7 +971,7 @@ describe('onTitleChange event', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let receivedTitle = '';
       term.onTitleChange((title) => {
@@ -957,7 +989,7 @@ describe('onTitleChange event', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let receivedTitle = '';
       term.onTitleChange((title) => {
@@ -975,7 +1007,7 @@ describe('onTitleChange event', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let receivedTitle = '';
       term.onTitleChange((title) => {
@@ -1013,7 +1045,7 @@ describe('attachCustomKeyEventHandler()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       const handler = (e: KeyboardEvent) => false;
       expect(() => term.attachCustomKeyEventHandler(handler)).not.toThrow();
@@ -1024,7 +1056,7 @@ describe('attachCustomKeyEventHandler()', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       const handler = (e: KeyboardEvent) => false;
       expect(() => term.attachCustomKeyEventHandler(handler)).not.toThrow();
@@ -1055,7 +1087,7 @@ describe('Terminal Options', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24, convertEol: true });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       term.write('line1\nline2');
 
@@ -1070,7 +1102,7 @@ describe('Terminal Options', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24, disableStdin: true });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let received = false;
       term.onData(() => {
@@ -1087,7 +1119,7 @@ describe('Terminal Options', () => {
       const term = await createIsolatedTerminal({ cols: 80, rows: 24, disableStdin: true });
       // Using shared container from beforeEach
       if (!container) return;
-      await term.open(container!);
+      term.open(container!);
 
       let received = false;
       term.onData(() => {
@@ -1124,14 +1156,14 @@ describe('Buffer Access API', () => {
   test('isAlternateScreen() starts false', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
     expect(term.wasmTerm?.isAlternateScreen()).toBe(false);
   });
 
   test('isAlternateScreen() detects alternate screen mode', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
 
     // Enter alternate screen (DEC Private Mode 1049 - like vim does)
     term.write('\x1b[?1049h');
@@ -1145,7 +1177,7 @@ describe('Buffer Access API', () => {
   test('alternate screen exit triggers full redraw (vim exit fix)', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
 
     // Write content to main screen
     term.write('Main screen content line 1\r\n');
@@ -1197,7 +1229,7 @@ describe('Buffer Access API', () => {
   test('dirty state is cleared after markClean() following screen switch', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
 
     // Enter and exit alternate screen
     term.write('\x1b[?1049h');
@@ -1216,7 +1248,7 @@ describe('Buffer Access API', () => {
   test('multiple screen switches are handled correctly', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
     term.write('Initial content\r\n');
     term.wasmTerm?.clearDirty();
 
@@ -1245,7 +1277,7 @@ describe('Buffer Access API', () => {
   test('viewport content is correct after alternate screen exit', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
 
     // Write distinct content to main screen
     term.write('MAIN_LINE_1\r\n');
@@ -1310,7 +1342,7 @@ describe('Buffer Access API', () => {
   test('background colors are correctly restored after alternate screen exit', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
 
     // Write to main screen (default background = black)
     term.write('MAIN\r\n');
@@ -1355,7 +1387,7 @@ describe('Buffer Access API', () => {
   test('isRowWrapped() returns false for normal line breaks', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
     term.write('Line 1\r\nLine 2\r\n');
 
     expect(term.wasmTerm?.isRowWrapped(0)).toBe(false);
@@ -1369,7 +1401,7 @@ describe('Buffer Access API', () => {
     // Create narrow terminal to force wrapping
     const narrowTerm = await createIsolatedTerminal({ cols: 20, rows: 10 });
     const narrowContainer = document.createElement('div');
-    await narrowTerm.open(narrowContainer);
+    narrowTerm.open(narrowContainer);
 
     try {
       // Write text longer than terminal width (no newline)
@@ -1388,7 +1420,7 @@ describe('Buffer Access API', () => {
   test('isRowWrapped() handles edge cases', async () => {
     if (!container) throw new Error('DOM environment not available - check happydom setup');
 
-    await term.open(container!);
+    term.open(container!);
 
     // Row 0 can never be wrapped (nothing to wrap from)
     expect(term.wasmTerm?.isRowWrapped(0)).toBe(false);
@@ -1406,7 +1438,7 @@ describe('Terminal Config', () => {
     // Create terminal with custom scrollback
     const term = await createIsolatedTerminal({ cols: 80, rows: 24, scrollback: 500 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     try {
       // Write enough lines to fill scrollback
@@ -1438,7 +1470,7 @@ describe('Terminal Config', () => {
       },
     });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     try {
       // Get the default colors from render state
@@ -1470,7 +1502,7 @@ describe('Terminal Config', () => {
       },
     });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     try {
       // Write red text using ANSI escape code
@@ -1478,7 +1510,7 @@ describe('Terminal Config', () => {
 
       // Get first cell - should have red foreground
       const line = term.wasmTerm!.getLine(0);
-      const firstCell = line![0];
+      const firstCell = line[0];
 
       // The foreground should be red (0xFF0000)
       expect(firstCell.fg_r).toBe(255);
@@ -1495,7 +1527,7 @@ describe('Terminal Config', () => {
     // Create terminal with no config
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     try {
       // Should still work and have reasonable defaults
@@ -1515,7 +1547,7 @@ describe('Terminal Modes', () => {
     if (typeof document === 'undefined') return;
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container!);
+    term.open(container!);
 
     expect(term.hasBracketedPaste()).toBe(false);
     term.write('\x1b[?2004h');
@@ -1530,7 +1562,7 @@ describe('Terminal Modes', () => {
     if (typeof document === 'undefined') return;
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container!);
+    term.open(container!);
 
     let receivedData = '';
     term.onData((data) => {
@@ -1551,7 +1583,7 @@ describe('Terminal Modes', () => {
     if (typeof document === 'undefined') return;
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container!);
+    term.open(container!);
 
     expect(term.getMode(25)).toBe(true); // Cursor visible
     term.write('\x1b[?25l');
@@ -1564,7 +1596,7 @@ describe('Terminal Modes', () => {
     if (typeof document === 'undefined') return;
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container!);
+    term.open(container!);
 
     expect(term.hasFocusEvents()).toBe(false);
     term.write('\x1b[?1004h');
@@ -1577,7 +1609,7 @@ describe('Terminal Modes', () => {
     if (typeof document === 'undefined') return;
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container!);
+    term.open(container!);
 
     expect(term.hasMouseTracking()).toBe(false);
     term.write('\x1b[?1000h');
@@ -1590,7 +1622,7 @@ describe('Terminal Modes', () => {
     if (typeof document === 'undefined') return;
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container!);
+    term.open(container!);
 
     expect(term.getMode(4, true)).toBe(false); // Insert mode
     term.write('\x1b[4h');
@@ -1603,7 +1635,7 @@ describe('Terminal Modes', () => {
     if (typeof document === 'undefined') return;
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container!);
+    term.open(container!);
 
     term.write('\x1b[?2004h\x1b[?1004h\x1b[?1000h');
     expect(term.hasBracketedPaste()).toBe(true);
@@ -1613,21 +1645,27 @@ describe('Terminal Modes', () => {
     term.dispose();
   });
 
-  test('getMode() throws when terminal not open', async () => {
+  test('getMode() works before open (headless-compatible)', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
-    expect(() => term.getMode(25)).toThrow();
+    // Mode queries should work before open() - WASM terminal exists
+    const visible = term.getMode(25); // cursor visible mode
+    expect(typeof visible).toBe('boolean');
+    term.dispose();
   });
 
-  test('hasBracketedPaste() throws when terminal not open', async () => {
+  test('hasBracketedPaste() works before open (headless-compatible)', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
-    expect(() => term.hasBracketedPaste()).toThrow();
+    // Mode queries should work before open() - WASM terminal exists
+    const hasBP = term.hasBracketedPaste();
+    expect(hasBP).toBe(false); // Default is off
+    term.dispose();
   });
 
   test('alternate screen mode via getMode()', async () => {
     if (typeof document === 'undefined') return;
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container!);
+    term.open(container!);
 
     expect(term.getMode(1049)).toBe(false);
     term.write('\x1b[?1049h');
@@ -1677,7 +1715,7 @@ describe('Alternate Screen Rendering', () => {
   test('BUG REPRO: getLine and getViewport should return same data after partial updates', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     // Enter alternate screen
     term.write('\x1b[?1049h');
@@ -1732,7 +1770,7 @@ describe('Alternate Screen Rendering', () => {
   test('BUG REPRO: cells should have correct codepoints after clearing', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
 
@@ -1763,7 +1801,7 @@ describe('Alternate Screen Rendering', () => {
   test('BUG REPRO: multiple render cycles should not lose data', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
 
@@ -1816,7 +1854,7 @@ describe('Alternate Screen Rendering', () => {
   test('can enter alternate screen and write content', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     expect(term.wasmTerm?.isAlternateScreen()).toBe(true);
@@ -1830,7 +1868,7 @@ describe('Alternate Screen Rendering', () => {
   test('writing to line 0 should not affect content on line 10', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     term.write('\x1b[11;1HMIDDLE_CONTENT');
@@ -1849,7 +1887,7 @@ describe('Alternate Screen Rendering', () => {
   test('erasing display should clear all content including middle', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     term.write('\x1b[11;1HMIDDLE_CONTENT');
@@ -1865,7 +1903,7 @@ describe('Alternate Screen Rendering', () => {
   test('simulating vim-like behavior: welcome screen then typing', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     term.write('\x1b[2J');
@@ -1888,7 +1926,7 @@ describe('Alternate Screen Rendering', () => {
   test('REGRESSION: middle content persists incorrectly after partial updates', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     term.write('\x1b[11;1HMIDDLE_LINE');
@@ -1913,7 +1951,7 @@ describe('Alternate Screen Rendering', () => {
   test('getLine returns fresh data after each update', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     term.write('INITIAL');
@@ -1928,7 +1966,7 @@ describe('Alternate Screen Rendering', () => {
   test('full viewport retrieval reflects actual terminal state', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     term.write('\x1b[2J');
@@ -1954,7 +1992,7 @@ describe('Alternate Screen Rendering', () => {
   test('ED (Erase Display) sequences work correctly in alternate screen', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     for (let i = 0; i < 24; i++) {
@@ -1978,7 +2016,7 @@ describe('Alternate Screen Rendering', () => {
   test('ED 0 (erase from cursor to end) works correctly', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     for (let i = 0; i < 24; i++) {
@@ -2001,7 +2039,7 @@ describe('Alternate Screen Rendering', () => {
   test('multiple update/clearDirty cycles maintain correct state', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
 
@@ -2032,7 +2070,7 @@ describe('Alternate Screen Rendering', () => {
   test('clearing a line marks it dirty', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     term.write('\x1b[11;1HMIDDLE');
@@ -2052,7 +2090,7 @@ describe('Alternate Screen Rendering', () => {
   test('ED sequence marks all affected rows dirty', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     for (let i = 0; i < 24; i++) {
@@ -2077,7 +2115,7 @@ describe('Alternate Screen Rendering', () => {
   test('getViewport and getLine return consistent data', async () => {
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
     const container = document.createElement('div');
-    await term.open(container);
+    term.open(container);
 
     term.write('\x1b[?1049h');
     term.write('\x1b[5;1HVIEWPORT_TEST');
@@ -2118,7 +2156,7 @@ describe('Selection with Scrollback', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cols: 80, rows: 24, scrollback: 1000 });
-    await term.open(container!);
+    term.open(container!);
 
     // Write 100 lines with unique identifiable content
     // Lines 0-99, where each line has "Line XXX: content"
@@ -2171,7 +2209,7 @@ describe('Selection with Scrollback', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cols: 80, rows: 24, scrollback: 1000 });
-    await term.open(container!);
+    term.open(container!);
 
     // Write 100 lines
     for (let i = 0; i < 100; i++) {
@@ -2211,7 +2249,7 @@ describe('Selection with Scrollback', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cols: 80, rows: 24, scrollback: 1000 });
-    await term.open(container!);
+    term.open(container!);
 
     // Write 100 lines
     for (let i = 0; i < 100; i++) {
@@ -2242,7 +2280,7 @@ describe('Selection with Scrollback', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cols: 80, rows: 24, scrollback: 1000 });
-    await term.open(container!);
+    term.open(container!);
 
     // Write 100 simple numbered lines
     for (let i = 0; i < 100; i++) {
@@ -2284,7 +2322,7 @@ describe('Selection with Scrollback', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cols: 80, rows: 24, scrollback: 1000 });
-    await term.open(container!);
+    term.open(container!);
 
     // Write 100 lines
     for (let i = 0; i < 100; i++) {
@@ -2367,7 +2405,7 @@ describe('Options Proxy handleOptionChange', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cursorStyle: 'block' });
-    await term.open(container);
+    term.open(container);
 
     // Verify initial state
     expect(term.options.cursorStyle).toBe('block');
@@ -2392,7 +2430,7 @@ describe('Options Proxy handleOptionChange', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cursorBlink: false });
-    await term.open(container);
+    term.open(container);
 
     // Verify initial state
     expect(term.options.cursorBlink).toBe(false);
@@ -2406,7 +2444,7 @@ describe('Options Proxy handleOptionChange', () => {
     // @ts-ignore - accessing private for test
     expect(renderer.cursorBlink).toBe(true);
     // @ts-ignore - accessing private for test
-    expect(renderer.cursorBlink_.intervalId).toBeDefined();
+    expect(renderer.cursorBlinkInterval).toBeDefined();
 
     // Disable cursor blink
     term.options.cursorBlink = false;
@@ -2421,7 +2459,7 @@ describe('Options Proxy handleOptionChange', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
-    await term.open(container);
+    term.open(container);
 
     let resizeEventFired = false;
     let resizedCols = 0;
@@ -2467,7 +2505,7 @@ describe('Options Proxy handleOptionChange', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ fontSize: 15, cols: 80, rows: 24 });
-    await term.open(container);
+    term.open(container);
 
     // @ts-ignore - accessing private for test
     const renderer = term.renderer;
@@ -2499,7 +2537,7 @@ describe('Options Proxy handleOptionChange', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ fontFamily: 'monospace', cols: 80, rows: 24 });
-    await term.open(container);
+    term.open(container);
 
     // @ts-ignore - accessing private for test
     const renderer = term.renderer;
@@ -2521,7 +2559,7 @@ describe('Options Proxy handleOptionChange', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ fontSize: 15, cols: 80, rows: 24 });
-    await term.open(container);
+    term.open(container);
 
     // Write some text and select it
     term.write('Hello World');
@@ -2541,7 +2579,7 @@ describe('Options Proxy handleOptionChange', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ fontSize: 15, cols: 80, rows: 24 });
-    await term.open(container);
+    term.open(container);
 
     const initialCols = term.cols;
     const initialRows = term.rows;
@@ -2582,7 +2620,7 @@ describe('disableStdin', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     const receivedData: string[] = [];
     term.onData((data) => receivedData.push(data));
@@ -2604,7 +2642,7 @@ describe('disableStdin', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     const receivedData: string[] = [];
     term.onData((data) => receivedData.push(data));
@@ -2624,7 +2662,7 @@ describe('disableStdin', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     const receivedData: string[] = [];
     term.onData((data) => receivedData.push(data));
@@ -2651,7 +2689,7 @@ describe('disableStdin', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     const receivedData: string[] = [];
     term.onData((data) => receivedData.push(data));
@@ -2679,7 +2717,7 @@ describe('disableStdin', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     const receivedData: string[] = [];
     term.onData((data) => receivedData.push(data));
@@ -2707,7 +2745,7 @@ describe('disableStdin', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     const receivedData: string[] = [];
     term.onData((data) => receivedData.push(data));
@@ -2786,43 +2824,20 @@ describe('Grapheme Cluster Support', () => {
 
   test('cell grapheme_len is 0 for simple ASCII characters', async () => {
     const term = await createIsolatedTerminal();
-    await term.open(container!);
+    term.open(container!);
     term.write('Hello');
 
     // Get the viewport and check the first cell
     const viewport = term.wasmTerm!.getViewport();
     expect(viewport[0].codepoint).toBe(0x48); // 'H'
     expect(viewport[0].grapheme_len).toBe(0);
-    expect(viewport[0].grapheme).toBeNull();
-
-    term.dispose();
-  });
-
-  test('cell.grapheme is populated for kitty placeholder cells', async () => {
-    // U+10EEEE (kitty placeholder) plus two combining diacritics from
-    // ROWCOLUMN_DIACRITICS — this is the on-the-wire pattern kitty
-    // applications emit to render virtual placement slices. The renderer
-    // hot path reads cell.grapheme directly to avoid the O(row)
-    // getGrapheme(y, x) crossing; this test guards the producer side.
-    const term = await createIsolatedTerminal();
-    await term.open(container!);
-    // U+10EEEE = 0xF4 0x8E 0xBB 0xAE; U+0305 = 0xCC 0x85; U+030D = 0xCC 0x8D.
-    const utf8 = '\u{10EEEE}\u{0305}\u{030D}';
-    term.write(utf8);
-
-    const viewport = term.wasmTerm!.getViewport();
-    expect(viewport[0].codepoint).toBe(0x10eeee);
-    // grapheme_len counts extras beyond the base codepoint.
-    expect(viewport[0].grapheme_len).toBe(2);
-    expect(viewport[0].grapheme).not.toBeNull();
-    expect(viewport[0].grapheme).toEqual([0x0305, 0x030d]);
 
     term.dispose();
   });
 
   test('getGraphemeString returns simple characters correctly', async () => {
     const term = await createIsolatedTerminal();
-    await term.open(container!);
+    term.open(container!);
     term.write('Test');
 
     // Test basic ASCII
@@ -2834,7 +2849,7 @@ describe('Grapheme Cluster Support', () => {
 
   test('getGrapheme returns null for invalid coordinates', async () => {
     const term = await createIsolatedTerminal();
-    await term.open(container!);
+    term.open(container!);
     term.write('Test');
 
     // Test out of bounds
@@ -2846,7 +2861,7 @@ describe('Grapheme Cluster Support', () => {
 
   test('getGrapheme returns array of codepoints', async () => {
     const term = await createIsolatedTerminal();
-    await term.open(container!);
+    term.open(container!);
     term.write('A');
 
     const codepoints = term.wasmTerm!.getGrapheme(0, 0);
@@ -2859,7 +2874,7 @@ describe('Grapheme Cluster Support', () => {
 
   test('grapheme cluster mode 2027 is enabled by default', async () => {
     const term = await createIsolatedTerminal();
-    await term.open(container!);
+    term.open(container!);
 
     // Mode 2027 should be enabled by default for proper Unicode handling
     // This is a DEC private mode, not ANSI
@@ -2895,7 +2910,7 @@ describe('Write Behavior', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     term.write('Line1\r\n');
     term.write('Line2\r\n');
@@ -2916,7 +2931,7 @@ describe('Write Behavior', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     const callbackOrder: number[] = [];
 
@@ -2954,14 +2969,13 @@ describe('Synchronous open()', () => {
     }
   });
 
-  test('open() returns a Promise', async () => {
+  test('open() returns void (synchronous)', async () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
     const result = term.open(container);
 
-    expect(result).toBeInstanceOf(Promise);
-    await result;
+    expect(result).toBeUndefined();
 
     term.dispose();
   });
@@ -2970,7 +2984,7 @@ describe('Synchronous open()', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     expect(term.element).toBe(container);
 
@@ -2981,7 +2995,7 @@ describe('Synchronous open()', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cols: 100, rows: 50 });
-    await term.open(container);
+    term.open(container);
 
     expect(term.cols).toBe(100);
     expect(term.rows).toBe(50);
@@ -2993,7 +3007,7 @@ describe('Synchronous open()', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal();
-    await term.open(container);
+    term.open(container);
 
     expect(term.wasmTerm).toBeDefined();
 
@@ -3004,13 +3018,652 @@ describe('Synchronous open()', () => {
     if (!container) return;
 
     const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
-    await term.open(container);
+    term.open(container);
 
     term.resize(120, 40);
 
     expect(term.cols).toBe(120);
     expect(term.rows).toBe(40);
 
+    term.dispose();
+  });
+
+  test('focusOnOpen: false prevents auto-focus on open', async () => {
+    if (!container) return;
+
+    // Focus a different element first
+    const other = document.createElement('input');
+    document.body.appendChild(other);
+    other.focus();
+    expect(document.activeElement).toBe(other);
+
+    const term = await createIsolatedTerminal({ focusOnOpen: false });
+    term.open(container);
+
+    // The terminal should NOT have stolen focus
+    expect(document.activeElement).toBe(other);
+
+    other.remove();
+    term.dispose();
+  });
+
+  test('focusOnOpen defaults to true', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal();
+    term.open(container);
+
+    // With IME routing (PR #11) focus lands on the hidden textarea inside the
+    // container rather than on the container itself — either is correct.
+    const active = document.activeElement;
+    expect(active === container || container.contains(active)).toBe(true);
+
+    term.dispose();
+  });
+});
+
+describe('preserveScrollOnWrite option', () => {
+  let container: HTMLElement | null = null;
+
+  beforeEach(() => {
+    if (typeof document !== 'undefined') {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+    }
+  });
+
+  afterEach(() => {
+    if (container && container.parentNode) {
+      container.parentNode.removeChild(container);
+      container = null;
+    }
+  });
+
+  test('default (false): writes auto-scroll viewport to bottom (legacy behaviour)', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({ cols: 80, rows: 5, scrollback: 50000 });
+    term.open(container);
+
+    // Fill scrollback so viewportY can move off zero
+    for (let i = 0; i < 200; i++) term.write(`line ${i}\r\n`);
+
+    // Simulate user scrolling up
+    const before = term.wasmTerm!.getScrollbackLength();
+    term.scrollLines(-10);
+    expect(term.viewportY).toBeGreaterThan(0);
+
+    // New output arrives — legacy behaviour snaps the viewport back to bottom
+    term.write('new output\r\n');
+    expect(term.viewportY).toBe(0);
+    expect(term.wasmTerm!.getScrollbackLength()).toBeGreaterThanOrEqual(before);
+
+    term.dispose();
+  });
+
+  test('preserveScrollOnWrite=true: viewport stays locked on the same content', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({
+      cols: 80,
+      rows: 5,
+      scrollback: 50000,
+      preserveScrollOnWrite: true,
+    });
+    term.open(container);
+
+    for (let i = 0; i < 200; i++) term.write(`line ${i}\r\n`);
+
+    term.scrollLines(-10);
+    const savedViewportY = term.viewportY;
+    const savedScrollback = term.wasmTerm!.getScrollbackLength();
+    expect(savedViewportY).toBeGreaterThan(0);
+
+    term.write('extra line\r\n');
+    const newScrollback = term.wasmTerm!.getScrollbackLength();
+    const delta = newScrollback - savedScrollback;
+
+    // viewportY should have shifted by the scrollback delta (or clamped) — NOT snapped to 0
+    expect(term.viewportY).not.toBe(0);
+    expect(term.viewportY).toBe(Math.max(0, Math.min(savedViewportY + delta, newScrollback)));
+
+    term.dispose();
+  });
+
+  describe('WASM memory safety', () => {
+    let container: HTMLElement | null = null;
+
+    beforeEach(() => {
+      if (typeof document !== 'undefined') {
+        container = document.createElement('div');
+        document.body.appendChild(container);
+      }
+    });
+
+    afterEach(() => {
+      if (container && container.parentNode) {
+        container.parentNode.removeChild(container);
+        container = null;
+      }
+    });
+
+    test('new terminal should not contain stale data from freed terminal', async () => {
+      if (!container) return;
+
+      // Create first terminal and write content
+      const term1 = await createIsolatedTerminal({ cols: 80, rows: 24 });
+      term1.open(container);
+      term1.write('Hello stale data');
+
+      // Access the Ghostty instance to create a second raw terminal
+      const ghostty = (term1 as any).ghostty;
+      const wasmTerm1 = term1.wasmTerm!;
+
+      // Free the first WASM terminal and create a new one through the same instance
+      wasmTerm1.free();
+      const wasmTerm2 = ghostty.createTerminal(80, 24);
+
+      // New terminal should have clean grid
+      const line = wasmTerm2.getLine(0);
+      expect(line).not.toBeNull();
+      for (const cell of line!) {
+        expect(cell.codepoint).toBe(0);
+      }
+      expect(wasmTerm2.getScrollbackLength()).toBe(0);
+      wasmTerm2.free();
+
+      term1.dispose();
+    });
+
+    // https://github.com/coder/ghostty-web/issues/141
+    test('freeing terminal after writing multi-codepoint grapheme clusters should not corrupt WASM memory', async () => {
+      if (!container) return;
+
+      const term1 = await createIsolatedTerminal({ cols: 80, rows: 24 });
+      term1.open(container);
+      const ghostty = (term1 as any).ghostty;
+      const wasmTerm1 = term1.wasmTerm!;
+
+      // Write multi-codepoint grapheme clusters (flag emoji, skin tone, ZWJ sequence)
+      wasmTerm1.write('\u{1F1FA}\u{1F1F8}'); // 🇺🇸 regional indicator pair
+      wasmTerm1.write('\u{1F44B}\u{1F3FD}'); // 👋🏽 wave + skin tone modifier
+      wasmTerm1.write('\u{1F468}\u200D\u{1F469}\u200D\u{1F467}'); // 👨‍👩‍👧 ZWJ family
+
+      // Free the terminal that processed grapheme clusters
+      wasmTerm1.free();
+
+      // Creating and writing to a new terminal on the same instance should not crash
+      const wasmTerm2 = ghostty.createTerminal(80, 24);
+      expect(() => wasmTerm2.write('Hello')).not.toThrow();
+
+      // Verify the write actually worked
+      const line = wasmTerm2.getLine(0);
+      expect(line).not.toBeNull();
+      expect(line![0].codepoint).toBe('H'.codePointAt(0)!);
+
+      wasmTerm2.free();
+      term1.dispose();
+    });
+  });
+});
+
+describe('ESC k title sequence (issue #153)', () => {
+  let container: HTMLElement | null = null;
+
+  beforeEach(() => {
+    if (typeof document !== 'undefined') {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+    }
+  });
+
+  afterEach(() => {
+    if (container && container.parentNode) {
+      container.parentNode.removeChild(container);
+      container = null;
+    }
+  });
+
+  test('ESC k <text> ESC \\ does not leak the title payload onto the grid', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    term.open(container);
+
+    // GNU screen / tmux title-set: ESC k /tmp ESC \ then ESC k ls ESC \
+    // then the actual visible content. Before the strip pass landed,
+    // /tmp leaked onto row 0 and "ls" merged with the next line.
+    term.write('\x1bk/tmp\x1b\\\x1bkls\x1b\\demo.txt\r\n');
+
+    const line0 = term.wasmTerm!.getLine(0);
+    const text0 = line0
+      .map((c) => (c.codepoint ? String.fromCodePoint(c.codepoint) : ''))
+      .join('')
+      .trimEnd();
+    expect(text0).toBe('demo.txt');
+    expect(text0).not.toContain('/tmp');
+    expect(text0).not.toContain('ls');
+
+    term.dispose();
+  });
+
+  test('ESC k variant terminated by BEL is also stripped', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    term.open(container);
+
+    term.write('\x1bktitle\x07after\r\n');
+
+    const line0 = term.wasmTerm!.getLine(0);
+    const text0 = line0
+      .map((c) => (c.codepoint ? String.fromCodePoint(c.codepoint) : ''))
+      .join('')
+      .trimEnd();
+    expect(text0).toBe('after');
+
+    term.dispose();
+  });
+
+  test('OSC 0 title-set continues to be consumed by the WASM parser', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    term.open(container);
+
+    // OSC 0 ; <title> BEL — handled by WASM. The strip pass should not
+    // touch this sequence.
+    term.write('\x1b]0;mywindow\x07visible\r\n');
+
+    const line0 = term.wasmTerm!.getLine(0);
+    const text0 = line0
+      .map((c) => (c.codepoint ? String.fromCodePoint(c.codepoint) : ''))
+      .join('')
+      .trimEnd();
+    expect(text0).toBe('visible');
+
+    term.dispose();
+  });
+
+  test('Uint8Array input is stripped equivalently to string input', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    term.open(container);
+
+    const bytes = new TextEncoder().encode('\x1bktitle\x1b\\done\r\n');
+    term.write(bytes);
+
+    const line0 = term.wasmTerm!.getLine(0);
+    const text0 = line0
+      .map((c) => (c.codepoint ? String.fromCodePoint(c.codepoint) : ''))
+      .join('')
+      .trimEnd();
+    expect(text0).toBe('done');
+
+    term.dispose();
+  });
+});
+
+// ============================================================================
+// Dynamic Theme Changes
+// ============================================================================
+
+describe('Dynamic Theme Changes', () => {
+  let container: HTMLElement | null = null;
+
+  beforeEach(async () => {
+    if (typeof document !== 'undefined') {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+    }
+  });
+
+  afterEach(() => {
+    if (container && container.parentNode) {
+      container.parentNode.removeChild(container);
+      container = null;
+    }
+  });
+
+  test('full theme change updates renderer', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({
+      theme: { background: '#000000', foreground: '#ffffff' },
+    });
+    term.open(container);
+
+    // Change to a completely different theme
+    term.options.theme = {
+      background: '#ff0000',
+      foreground: '#00ff00',
+      cursor: '#0000ff',
+      red: '#aa0000',
+    };
+
+    // @ts-ignore - accessing private for test
+    const renderer = term.renderer;
+    // @ts-ignore - accessing private for test
+    expect(renderer.theme.background).toBe('#ff0000');
+    // @ts-ignore - accessing private for test
+    expect(renderer.theme.foreground).toBe('#00ff00');
+    // @ts-ignore - accessing private for test
+    expect(renderer.theme.cursor).toBe('#0000ff');
+
+    term.dispose();
+  });
+
+  test('full theme change updates WASM terminal colors', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal();
+    term.open(container);
+
+    term.options.theme = {
+      background: '#112233',
+      foreground: '#aabbcc',
+    };
+
+    // Force render state update to pick up new colors
+    term.wasmTerm!.update();
+    const colors = term.wasmTerm!.getColors();
+
+    // Verify WASM terminal has the new colors
+    expect(colors.background.r).toBe(0x11);
+    expect(colors.background.g).toBe(0x22);
+    expect(colors.background.b).toBe(0x33);
+    expect(colors.foreground.r).toBe(0xaa);
+    expect(colors.foreground.g).toBe(0xbb);
+    expect(colors.foreground.b).toBe(0xcc);
+
+    term.dispose();
+  });
+
+  test('partial theme update preserves previous customizations', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal();
+    term.open(container);
+
+    // First: change background only
+    term.options.theme = { background: '#111111' };
+
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.background).toBe('#111111');
+
+    // Second: change foreground only — background should be preserved
+    term.options.theme = { foreground: '#222222' };
+
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.background).toBe('#111111');
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.foreground).toBe('#222222');
+
+    term.dispose();
+  });
+
+  test('successive partial updates accumulate correctly', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal();
+    term.open(container);
+
+    term.options.theme = { background: '#aaaaaa' };
+    term.options.theme = { foreground: '#bbbbbb' };
+    term.options.theme = { cursor: '#cccccc' };
+
+    // @ts-ignore - accessing private for test
+    const theme = term.renderer.theme;
+    expect(theme.background).toBe('#aaaaaa');
+    expect(theme.foreground).toBe('#bbbbbb');
+    expect(theme.cursor).toBe('#cccccc');
+
+    term.dispose();
+  });
+
+  test('theme reset to empty object restores defaults', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({
+      theme: { background: '#ff0000', foreground: '#00ff00' },
+    });
+    term.open(container);
+
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.background).toBe('#ff0000');
+
+    // Reset to empty — should restore defaults
+    term.options.theme = {};
+
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.background).toBe('#1e1e1e');
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.foreground).toBe('#d4d4d4');
+
+    term.dispose();
+  });
+
+  test('theme reset to null restores defaults', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({
+      theme: { background: '#ff0000' },
+    });
+    term.open(container);
+
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.background).toBe('#ff0000');
+
+    // Reset to null
+    term.options.theme = null as any;
+
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.background).toBe('#1e1e1e');
+
+    term.dispose();
+  });
+
+  test('theme change before open() is applied correctly', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({
+      theme: { background: '#111111' },
+    });
+
+    // Change theme before open
+    term.options.theme = { background: '#222222' };
+
+    // Open — should use the latest theme
+    term.open(container);
+
+    // The buildWasmConfig reads from options.theme which is now #222222
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.background).toBe('#222222');
+
+    term.dispose();
+  });
+
+  test('ANSI palette color cells re-resolve after theme change', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({
+      theme: { red: '#cd3131' },
+    });
+    term.open(container);
+
+    // Write text with ANSI red (color index 1)
+    term.write('\x1b[31mRed text\x1b[0m');
+
+    // Change theme — new red
+    term.options.theme = { red: '#ff0000' };
+
+    // Force render state update and read cells
+    term.wasmTerm!.update();
+    const line = term.wasmTerm!.getLine(0);
+    expect(line).not.toBeNull();
+
+    // First cell ('R') should now have the new red color
+    const cell = line![0];
+    expect(cell.fg_r).toBe(0xff);
+    expect(cell.fg_g).toBe(0x00);
+    expect(cell.fg_b).toBe(0x00);
+
+    term.dispose();
+  });
+
+  test('explicit RGB color cells remain unchanged after theme change', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal();
+    term.open(container);
+
+    // Write text with explicit RGB color
+    term.write('\x1b[38;2;100;200;50mRGB text\x1b[0m');
+
+    // Change theme
+    term.options.theme = {
+      foreground: '#ffffff',
+      background: '#000000',
+      red: '#ff0000',
+    };
+
+    // Force render state update and read cells
+    term.wasmTerm!.update();
+    const line = term.wasmTerm!.getLine(0);
+    expect(line).not.toBeNull();
+
+    // First cell ('R') should still have the explicit RGB color
+    const cell = line![0];
+    expect(cell.fg_r).toBe(100);
+    expect(cell.fg_g).toBe(200);
+    expect(cell.fg_b).toBe(50);
+
+    term.dispose();
+  });
+
+  test('theme change triggers full redraw', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal();
+    term.open(container);
+
+    // Clear any existing dirty state
+    term.wasmTerm!.clearDirty();
+    expect(term.wasmTerm!.needsFullRedraw()).toBe(false);
+
+    // Change theme
+    term.options.theme = { background: '#ff0000' };
+
+    // Should need a full redraw
+    expect(term.wasmTerm!.needsFullRedraw()).toBe(true);
+
+    // After clearing, no longer dirty
+    term.wasmTerm!.clearDirty();
+    expect(term.wasmTerm!.needsFullRedraw()).toBe(false);
+
+    term.dispose();
+  });
+
+  test('invalid color values do not crash', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal();
+    term.open(container);
+
+    // Should not throw
+    term.options.theme = {
+      background: 'not-a-color',
+      foreground: 'rgb(999,0,0)',
+      red: '',
+    };
+
+    // @ts-ignore - accessing private for test
+    expect(term.renderer.theme.background).toBe('not-a-color');
+
+    term.dispose();
+  });
+
+  test('default fg/bg cells update after theme change', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({
+      theme: { foreground: '#aaaaaa', background: '#111111' },
+    });
+    term.open(container);
+
+    // Write text with default colors (no SGR)
+    term.write('Hello');
+
+    // Change theme
+    term.options.theme = { foreground: '#ffffff', background: '#000000' };
+
+    // Force render state update and read cells
+    term.wasmTerm!.update();
+    const line = term.wasmTerm!.getLine(0);
+    expect(line).not.toBeNull();
+
+    // First cell ('H') should have new default foreground
+    const cell = line![0];
+    expect(cell.fg_r).toBe(0xff);
+    expect(cell.fg_g).toBe(0xff);
+    expect(cell.fg_b).toBe(0xff);
+
+    term.dispose();
+  });
+});
+
+describe('echo latency optimization (issue #161)', () => {
+  let container: HTMLElement | null = null;
+
+  beforeEach(() => {
+    if (typeof document !== 'undefined') {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+    }
+  });
+
+  afterEach(() => {
+    if (container && container.parentNode) {
+      container.parentNode.removeChild(container);
+      container = null;
+    }
+  });
+
+  test('write() after a user-input fire renders synchronously instead of waiting for rAF', async () => {
+    if (!container) return;
+
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    term.open(container);
+
+    let renderCount = 0;
+    const renderer = (term as any).renderer;
+    const originalRender = renderer.render.bind(renderer);
+    renderer.render = (...args: unknown[]) => {
+      renderCount++;
+      return originalRender(...args);
+    };
+    // Drain any opening renders before counting.
+    await new Promise((r) => setTimeout(r, 16));
+    renderCount = 0;
+
+    // Simulate the user typing — input(data, /* wasUserInput */ true) sets
+    // awaitingEcho before firing dataEmitter.
+    term.input('x', true);
+
+    // The actual echo bytes arrive next:
+    term.write('x');
+
+    // The synchronous render should have run during writeInternal.
+    expect(renderCount).toBeGreaterThanOrEqual(1);
+
+    // And the flag should be cleared so a subsequent write without user
+    // input doesn't trigger another synchronous render.
+    renderCount = 0;
+    term.write('more output');
+    expect(renderCount).toBe(0);
+
+    renderer.render = originalRender;
     term.dispose();
   });
 });
@@ -3083,61 +3736,5 @@ describe('Write PTY response routing', () => {
 
     ta.free();
     tb.free();
-  });
-
-  describe('replaceCanvas', () => {
-    async function fabricate() {
-      const parent = document.createElement('div');
-      document.body.appendChild(parent);
-      const canvas = document.createElement('canvas');
-      canvas.style.cssText = 'display: block; cursor: text;';
-      canvas.width = 800;
-      canvas.height = 600;
-      parent.appendChild(canvas);
-      // We access the private replaceCanvas via type-erased lookup.
-      // The method is logically pure with respect to Terminal state — it
-      // only reads/writes DOM — so we don't need a fully-initialized Terminal.
-      const term = await createIsolatedTerminal();
-      return { term, parent, canvas };
-    }
-
-    test('returns a fresh canvas instance (not the old one)', async () => {
-      const { term, canvas: oldCanvas } = await fabricate();
-      const fresh = (term as any).replaceCanvas(oldCanvas);
-      expect(fresh).not.toBe(oldCanvas);
-      expect(fresh).toBeInstanceOf(HTMLCanvasElement);
-    });
-
-    test('new canvas is attached to the same parent', async () => {
-      const { term, parent, canvas: oldCanvas } = await fabricate();
-      const fresh = (term as any).replaceCanvas(oldCanvas);
-      expect(fresh.parentNode).toBe(parent);
-    });
-
-    test('old canvas is detached from its parent', async () => {
-      const { term, canvas: oldCanvas } = await fabricate();
-      (term as any).replaceCanvas(oldCanvas);
-      expect(oldCanvas.parentNode).toBe(null);
-    });
-
-    test('CSS state (style.cssText) is copied to the new canvas', async () => {
-      const { term, canvas: oldCanvas } = await fabricate();
-      const fresh = (term as any).replaceCanvas(oldCanvas);
-      expect(fresh.style.display).toBe('block');
-      expect(fresh.style.cursor).toBe('text');
-    });
-
-    test('drawing-buffer dimensions are copied to the new canvas', async () => {
-      const { term, canvas: oldCanvas } = await fabricate();
-      const fresh = (term as any).replaceCanvas(oldCanvas);
-      expect(fresh.width).toBe(800);
-      expect(fresh.height).toBe(600);
-    });
-
-    test('throws when old canvas has no parent', async () => {
-      const { term, canvas: oldCanvas } = await fabricate();
-      oldCanvas.parentNode!.removeChild(oldCanvas);
-      expect(() => (term as any).replaceCanvas(oldCanvas)).toThrow(/no parent/i);
-    });
   });
 });

@@ -993,6 +993,7 @@ export const COLORS_STRUCT_SIZE = 12;
  * All color values use 0xRRGGBB format. A value of 0 means "use default".
  */
 export interface GhosttyTerminalConfig {
+  /** Scrollback buffer size in bytes. Passed to Terminal.max_scrollback. */
   scrollbackLimit?: number;
   fgColor?: number;
   bgColor?: number;
@@ -1033,17 +1034,6 @@ export interface GhosttyCell {
   width: number; // u8 (character width: 1=normal, 2=wide, etc.)
   hyperlink_id: number; // u16 (0 = no link, >0 = hyperlink ID in set)
   grapheme_len: number; // u8 (number of extra codepoints beyond first)
-  /**
-   * Combining codepoints beyond the first (length === grapheme_len). Null
-   * when grapheme_len is 0. Populated by GhosttyTerminal.getViewport during
-   * the existing cell walk so renderers don't need to call getGrapheme(y, x)
-   * — that path re-walks the row iterator from row 0 and is O(row) per call,
-   * which dominated the per-frame budget for kitty unicode placeholders.
-   *
-   * Holds extras only (matching grapheme_len semantics): for a kitty
-   * placeholder the array is [rowDiacritic, colDiacritic, imgIdMsbDiacritic?].
-   */
-  grapheme: number[] | null;
 }
 
 /**
@@ -1082,7 +1072,7 @@ export interface Cursor {
  * Terminal configuration (passed to ghostty_terminal_new_with_config)
  */
 export interface TerminalConfig {
-  scrollback_limit: number; // Number of scrollback lines (default: 10,000)
+  scrollback_limit: number; // Scrollback buffer size in bytes (default: 10,000)
   fg_color: RGB; // Default foreground color
   bg_color: RGB; // Default background color
 }

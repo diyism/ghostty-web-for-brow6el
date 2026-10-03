@@ -26,22 +26,12 @@ else
     echo "📦 Ghostty submodule already initialized"
 fi
 
-# Ensure submodule worktree is clean before patching. If it's dirty, we
-# refuse to proceed — applying the WASM API patch on top of unknown
-# changes (or wiping them automatically) would silently destroy
-# contributor work.
+# Ensure submodule worktree is clean before patching (in case a previous build was interrupted)
 cd ghostty
 if [ -n "$(git status --porcelain)" ]; then
-    echo "❌ Error: Ghostty submodule has uncommitted changes."
-    echo ""
-    git status --short | sed 's/^/    /'
-    echo ""
-    echo "The build needs a clean submodule to apply the WASM API patch."
-    echo "Either:"
-    echo "  • Commit or stash your submodule edits, or"
-    echo "  • If these are leftovers from an interrupted build, run:"
-    echo "      (cd ghostty && git restore . && git clean -fd)"
-    exit 1
+    echo "🧹 Submodule has leftover changes, resetting..."
+    git restore .
+    git clean -fd
 fi
 cd ..
 
@@ -70,19 +60,14 @@ cd ..
 # Copy to project root
 cp ghostty/zig-out/bin/ghostty-vt.wasm ./
 
-# Reverse the patch we applied. Don't touch anything else — contributors
-# may have generated build artifacts in the submodule that they want to
-# keep, and we shouldn't run git restore/clean on a worktree we don't
-# fully own.
+# Revert patch & clean any new files it created so the submodule stays clean
 echo "🧹 Cleaning up..."
 cd ghostty
 if [ -s "../$PATCH" ]; then
-    git apply -R "../$PATCH" 2>/dev/null || {
-        echo "⚠️  Couldn't reverse the patch cleanly. The submodule may"
-        echo "    need manual cleanup before the next build:"
-        echo "      (cd ghostty && git restore . && git clean -fd)"
-    }
+    git apply -R "../$PATCH"
 fi
+git restore .
+git clean -fd
 cd ..
 
 SIZE=$(du -h ghostty-vt.wasm | cut -f1)

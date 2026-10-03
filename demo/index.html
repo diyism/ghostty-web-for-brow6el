@@ -131,7 +131,7 @@
     </div>
 
     <script type="module">
-      import { init, Terminal, installRendererHud, parseRendererFromURL } from '../lib/index.ts';
+      import { init, Terminal } from '../lib/index.ts';
       import { FitAddon } from '../lib/addons/fit.ts';
 
       let term;
@@ -165,18 +165,14 @@
             foreground: '#d4d4d4',
           },
           scrollback: 10000,
-          renderer: parseRendererFromURL(),
         });
 
         fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
 
-        const container = document.getElementById('terminal-container');
-        await term.open(container);
+        term.open(document.getElementById('terminal-container'));
         fitAddon.fit();
         fitAddon.observeResize(); // Auto-fit when container resizes
-
-        installRendererHud(term, { parent: container, position: 'absolute' });
 
         // Handle window resize (for browsers that don't trigger ResizeObserver on window resize)
         window.addEventListener('resize', () => {
@@ -211,6 +207,11 @@
         term.onScroll((ydisp) => {
           console.log('Scroll position:', ydisp);
         });
+
+        // Expose globals for Playwright E2E tests
+        window.__ghosttyTerm = term;
+        window.__ghosttyFitAddon = fitAddon;
+        window.__ghosttyReady = true;
 
         // Connect to PTY server - terminal is ready immediately after open()
         console.log('[Demo] Terminal ready, connecting with size:', term.cols, 'x', term.rows);

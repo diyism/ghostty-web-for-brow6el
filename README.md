@@ -1,51 +1,3 @@
-    // forked from: https://github.com/NimbleMarkets/ghostty-web/tree/nm-webgpu
-
-    // ssh into your debian VPS
-    
-    // install tailscale
-    $ sudo apt install tailscale
-    $ tailscale up
-    $ tailscale ip
-
-    // install brow6el
-    // appimage failed:
-    // $ wget https://www.brow6el.dev/appimage/brow6el-x86_64.AppImage
-    // $ sudo install ./brow6el-x86_64.AppImage /usr/bin/brow6el
-    $ git clone https://github.com/diyism/broxel
-    $ cd broxel
-    $ sudo apt install -y cmake build-essential pkg-config
-    $ sudo apt install -y libsixel-dev libx11-dev
-    $ ./download_cef.sh
-    $ ./build.sh
-    $ sudo mv ./build /opt/brow6el
-    $ sudo ln -s /opt/brow6el/run_brow6el.sh /usr/bin/brow6el
-    $ brow6el https://www.google.com/ncr
-
-    // install bun
-    $ curl -fsSL https://bun.sh/install | bash
-    $ source ~/.bashrc
-
-    // install zig, ghostty-web-for-brow6el need the fixed version 0.15.2
-    $ wget https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
-    $ tar -xf zig-x86_64-linux-0.15.2.tar.xz
-    $ sudo mv zig-x86_64-linux-0.15.2 /opt/zig
-    $ sudo ln -s /opt/zig/zig /usr/local/bin/zig
-    
-    $ git clone https://github.com/diyism/ghostty-web-for-brow6el
-    $ cd ghostty-web-for-brow6el
-    $ bun install
-    $ cd demo ; bun install; cd ..
-    $ bun run build
-    $ PORT=8080 bun --bun run demo
-
-    // in your phone (installed tailscale app)
-    // open http://<vps tailscale ip>:8080
-    // type in: brow6el https://www.google.com/ncr
-
-    // in your debian PC, need no ghostty-web, use wezterm + ssh, and run "brow6el https://www.google.com/ncr"
-
-![](./screenshot.png)
-
 # ghostty-web
 
 [![NPM Version](https://img.shields.io/npm/v/ghostty-web)](https://npmjs.com/package/ghostty-web) [![NPM Downloads](https://img.shields.io/npm/dw/ghostty-web)](https://npmjs.com/package/ghostty-web) [![npm bundle size](https://img.shields.io/bundlephobia/minzip/ghostty-web)](https://npmjs.com/package/ghostty-web) [![license](https://img.shields.io/github/license/coder/ghostty-web)](./LICENSE)
@@ -83,6 +35,25 @@ xterm.js is everywhere—VS Code, Hyper, countless web terminals. But it has fun
 
 xterm.js reimplements terminal emulation in JavaScript. Every escape sequence, every edge case, every Unicode quirk—all hand-coded. Ghostty's emulator is the same battle-tested code that runs the native Ghostty app.
 
+### Keyboard encoding
+
+Keyboard input is encoded by Ghostty's key encoder. Byte sequences largely match xterm.js's defaults — Home/End honor DECCKM, Shift+nav and Shift+F-keys preserve the Shift modifier in the emitted CSI sequence, non-BMP characters pass through, Arrow keys honor cursor-application mode. Two deliberate differences:
+
+- **Shift+Enter is distinguishable from Enter** (emitted as `\x1b[27;2;13~` rather than bare `\r`, following fixterms), so modern line editors and REPLs can treat Shift+Enter as a newline-without-submit.
+- **Kitty keyboard protocol and xterm modifyOtherKeys state 2 are supported** when an app enables them. xterm.js implements only the traditional escape sequences.
+
+If you need byte-for-byte xterm.js behavior for a specific key (e.g. Shift+Enter mapped to `\r` for tools that don't understand the fixterms sequence), intercept it in `attachCustomKeyEventHandler` and emit the bytes you want via `term.input(bytes, true)`:
+
+```ts
+term.attachCustomKeyEventHandler((e) => {
+  if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    term.input('\r', true); // fires onData with '\r'
+    return true; // suppress the default encoder path
+  }
+  return false;
+});
+```
+
 ## Installation
 
 ```bash
@@ -106,66 +77,196 @@ const term = new Terminal({
   },
 });
 
-await term.open(document.getElementById('terminal'));
+term.open(document.getElementById('terminal'));
 term.onData((data) => websocket.send(data));
 websocket.onmessage = (e) => term.write(e.data);
 ```
 
-For a comprehensive client <-> server example, refer to the [demo](./demo/index.html#L141).
+For a comprehensive client ↔ server example, refer to the [demo](./demo/index.html).
 
-### Renderers
+## Headless Mode
 
-Three GPU/CPU rendering backends are supported. Pass
-`{ renderer: 'webgpu' | 'webgl' | 'canvas2d' | 'auto' }` (default `'auto'`) to the
-`Terminal` constructor.
+`TerminalCore` provides a headless terminal (no DOM, no canvas) for server-side rendering,
+testing, or non-browser environments:
 
-- **WebGPU** — preferred; required for full kitty graphics atlas performance
-- **WebGL2** — fallback for browsers without WebGPU (notably Safari < 26 and
-  Firefox without the flag); shares the same atlas-based kitty path
-- **Canvas2D** — universal fallback; supports kitty graphics via 2D context
-
-`'auto'` tries WebGPU → WebGL2 → Canvas2D in order, transparently falling
-through to the next on init failure. At runtime, GPU device-loss (WebGPU) or
-context-loss (WebGL) automatically demotes to the next available backend on
-a fresh canvas.
-
-### Renderer HUD
-
-A small corner badge that shows the active renderer backend and live FPS,
-with click-to-cycle and `Alt+Shift+R` cycling between renderers. Useful for
-demos and during development; opt-in.
-
-```javascript
-import { init, Terminal, installRendererHud, parseRendererFromURL } from 'ghostty-web';
+```typescript
+import { init, TerminalCore } from 'ghostty-web';
 
 await init();
-const term = new Terminal({ renderer: parseRendererFromURL() });
-await term.open(document.getElementById('terminal'));
 
-const uninstall = installRendererHud(term, {
-  parent: document.getElementById('terminal'),
-  position: 'absolute',
-});
-// later: uninstall();
+const term = new TerminalCore({ cols: 80, rows: 24 });
+term.write('Hello World\r\n');
+
+const line = term.buffer.active.getLine(0);
+// inspect line cells...
 ```
 
-`parseRendererFromURL()` reads `?renderer=webgpu|webgl|canvas2d|auto` from
-the current URL and falls back to `window.__ghosttyDefaultRenderer` if a
-server has injected one, then `'auto'`.
+`Terminal` extends `TerminalCore` with all browser rendering, input handling, and addon support.
 
-`installRendererHud(terminal, opts?)` options:
+## Shell Integration (OSC 133)
 
-| Option             | Default                         | Description                                                |
-| ------------------ | ------------------------------- | ---------------------------------------------------------- |
-| `parent`           | `document.body`                 | Where to mount the badge.                                  |
-| `position`         | `'fixed'`                       | `'fixed'` (viewport) or `'absolute'` (relative to parent). |
-| `className`        | —                               | CSS class applied to the badge for custom styling.         |
-| `clickToToggle`    | `true`                          | Click the badge to cycle the renderer.                     |
-| `bindToggleHotkey` | `true`                          | Bind `Alt+Shift+R` on `window` to cycle the renderer.      |
-| `cycle`            | `['webgpu','webgl','canvas2d']` | Cycle order; pass a subset to skip backends.               |
+ghostty-web understands [OSC 133](https://iterm2.com/documentation-escape-codes.html) shell
+integration sequences, letting you hook into shell prompt and command lifecycle events:
 
-The toggle navigates `window.location.href` with the new `?renderer=` value,
-so the page reloads with the chosen backend.
+```typescript
+term.onPromptStart(() => {
+  console.log('Shell prompt started');
+});
+
+term.onPromptEnd(() => {
+  console.log('Shell prompt ended — user can now type');
+});
+
+term.onCommandStart(() => {
+  console.log('Command execution began');
+});
+
+term.onCommandEnd((e) => {
+  console.log('Command finished, exit code:', e.exitCode);
+});
+```
+
+Shells that support OSC 133 (fish, bash with the integration script, zsh with the plugin) emit
+these sequences automatically.
+
+## Cursor Shape (OSC 22)
+
+Applications can request cursor shape changes via `OSC 22`:
+
+```typescript
+term.onMouseCursorChange((cursor) => {
+  // cursor is a CSS cursor string: 'default', 'text', 'pointer', etc.
+  document.body.style.cursor = cursor;
+});
+```
+
+## Focus Events (DEC mode 1004)
+
+When an application enables focus tracking (`\x1b[?1004h`), ghostty-web fires focus/blur
+sequences to the PTY and emits events:
+
+```typescript
+term.onFocus(() => console.log('terminal focused'));
+term.onBlur(() => console.log('terminal blurred'));
+```
+
+## Synchronized Output (DEC mode 2026)
+
+ghostty-web respects the synchronized output mode (`\x1b[?2026h` / `\x1b[?2026l`),
+deferring rendering until the application signals it is ready. A timeout guard prevents
+indefinite hangs.
+
+## Dynamic Theming
+
+Themes can be set at construction time or updated at runtime:
+
+```typescript
+// At construction
+const term = new Terminal({ theme: { background: '#000', foreground: '#fff' } });
+
+// At runtime (triggers a re-render)
+term.options.theme = {
+  background: '#1e1e2e',
+  foreground: '#cdd6f4',
+  cursor: '#f5e0dc',
+  black: '#45475a',
+  red: '#f38ba8',
+  // ...all 16 ANSI colors supported
+};
+```
+
+## Selection API
+
+```typescript
+// Programmatic selection
+term.select(col, row, length); // select N characters starting at col/row
+term.selectAll(); // select all visible content
+term.clearSelection(); // clear selection
+term.hasSelection(); // boolean
+term.getSelectionPosition(); // { start: {x, y}, end: {x, y} } | null
+
+// Event
+term.onSelectionChange(() => {
+  console.log('Selection changed');
+});
+```
+
+Mouse selection (click-drag), `selectAll`, `clearSelection`, and `getSelectionPosition`
+all work out of the box.
+
+## Scrolling API
+
+```typescript
+term.scrollToTop();
+term.scrollToBottom();
+term.scrollLines(n); // positive = down, negative = up
+term.scrollPages(n); // scroll by viewport height
+
+term.onScroll((viewportY) => {
+  console.log('Scrolled to viewport offset', viewportY);
+});
+
+// Keep viewport pinned when new output arrives
+term.options.preserveScrollOnWrite = true;
+```
+
+## FitAddon
+
+```typescript
+import { init, Terminal } from 'ghostty-web';
+import { FitAddon } from 'ghostty-web/addons/fit';
+
+await init();
+const term = new Terminal();
+const fitAddon = new FitAddon();
+term.loadAddon(fitAddon);
+term.open(document.getElementById('terminal'));
+
+fitAddon.fit(); // resize terminal to fill container
+const dims = fitAddon.proposeDimensions(); // { cols, rows }
+
+window.addEventListener('resize', () => fitAddon.fit());
+```
+
+## Addon API
+
+ghostty-web supports the xterm.js addon interface:
+
+```typescript
+const addon = {
+  activate(terminal) {
+    // receives the Terminal instance
+  },
+  dispose() {
+    // called when terminal is disposed
+  },
+};
+
+term.loadAddon(addon);
+```
+
+## Events Reference
+
+| Event                 | Payload                 | Description                             |
+| --------------------- | ----------------------- | --------------------------------------- |
+| `onData`              | `string`                | Raw bytes from keyboard / `input()`     |
+| `onWrite`             | `string \| Uint8Array`  | Data written to the terminal            |
+| `onWriteParsed`       | —                       | After all buffered writes are processed |
+| `onRender`            | `{ start, end }`        | After a render frame (row range)        |
+| `onResize`            | `{ cols, rows }`        | Terminal resized                        |
+| `onScroll`            | `number`                | Viewport Y offset changed               |
+| `onLineFeed`          | —                       | Line feed received                      |
+| `onCursorMove`        | —                       | Cursor position changed                 |
+| `onSelectionChange`   | —                       | Selection changed                       |
+| `onTitleChange`       | `string`                | OSC 0/2 title escape                    |
+| `onBell`              | —                       | BEL character received                  |
+| `onFocus`             | —                       | Terminal focused (mode 1004)            |
+| `onBlur`              | —                       | Terminal blurred (mode 1004)            |
+| `onPromptStart`       | —                       | OSC 133;A — prompt started              |
+| `onPromptEnd`         | —                       | OSC 133;B — prompt ended                |
+| `onCommandStart`      | —                       | OSC 133;C — command execution started   |
+| `onCommandEnd`        | `{ exitCode?: number }` | OSC 133;D — command finished            |
+| `onMouseCursorChange` | `string`                | OSC 22 CSS cursor string                |
 
 ## Development
 
@@ -176,6 +277,30 @@ functionality.
 
 ```bash
 bun run build
+```
+
+### Getting the WASM without Zig
+
+If you don't have Zig installed, you can pull the pre-built WASM from the latest npm release:
+
+```bash
+npm pack ghostty-web@latest
+tar xf ghostty-web-*.tgz
+cp package/ghostty-vt.wasm .
+```
+
+### Running E2E Tests
+
+```bash
+bun run test:e2e
+```
+
+Tests use [Playwright](https://playwright.dev/) with Chromium. The dev server starts automatically.
+
+```bash
+bun run test:e2e:headed   # watch tests run in a real browser
+bun run test:e2e:ui       # Playwright UI mode
+bun run test:e2e:report   # open HTML report
 ```
 
 Mitchell Hashimoto (author of Ghostty) has [been working](https://mitchellh.com/writing/libghostty-is-coming) on `libghostty` which makes this all possible. The patches are very minimal thanks to the work the Ghostty team has done, and we expect them to get smaller.

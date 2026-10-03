@@ -13,7 +13,7 @@
 import { EventEmitter } from './event-emitter';
 import type { GhosttyTerminal } from './ghostty';
 import type { IEvent } from './interfaces';
-import type { Renderer } from './renderer-types';
+import type { CanvasRenderer } from './renderer';
 import type { Terminal } from './terminal';
 import type { GhosttyCell } from './types';
 
@@ -34,7 +34,7 @@ export interface SelectionCoordinates {
 
 export class SelectionManager {
   private terminal: Terminal;
-  private renderer: Renderer;
+  private renderer: CanvasRenderer;
   private wasmTerm: GhosttyTerminal;
   private textarea: HTMLTextAreaElement;
 
@@ -101,7 +101,7 @@ export class SelectionManager {
 
   constructor(
     terminal: Terminal,
-    renderer: Renderer,
+    renderer: CanvasRenderer,
     wasmTerm: GhosttyTerminal,
     textarea: HTMLTextAreaElement
   ) {
@@ -183,7 +183,15 @@ export class SelectionManager {
           if (char.trim()) {
             lastNonEmpty = lineText.length;
           }
-        } else {
+        } else if (!cell || cell.width !== 0) {
+          // Only add a space for truly empty cells, NOT for wide-character
+          // continuation cells. Wide characters (CJK, fullwidth Latin, etc.)
+          // occupy 2 terminal cells:
+          //   - First cell:  codepoint set, width=2
+          //   - Second cell: codepoint=0, width=0 (continuation marker)
+          // The first branch above handles the leading cell. We must skip
+          // the trailing continuation cell here, otherwise the copied text
+          // gets a stray space between every wide character.
           lineText += ' ';
         }
       }
@@ -350,7 +358,7 @@ export class SelectionManager {
    * Focus the terminal (make it receive keyboard input)
    */
   focus(): void {
-    const canvas = this.renderer.canvas;
+    const canvas = this.renderer.getCanvas();
     if (canvas.parentElement) {
       canvas.parentElement.focus();
     }
@@ -407,7 +415,7 @@ export class SelectionManager {
 
     // Clean up context menu event listener
     if (this.boundContextMenuHandler) {
-      const canvas = this.renderer.canvas;
+      const canvas = this.renderer.getCanvas();
       canvas.removeEventListener('contextmenu', this.boundContextMenuHandler);
       this.boundContextMenuHandler = null;
     }
@@ -429,7 +437,7 @@ export class SelectionManager {
    * Attach mouse event listeners to canvas
    */
   private attachEventListeners(): void {
-    const canvas = this.renderer.canvas;
+    const canvas = this.renderer.getCanvas();
 
     // Mouse down - start selection or clear existing
     canvas.addEventListener('mousedown', (e: MouseEvent) => {
@@ -584,11 +592,15 @@ export class SelectionManager {
         }
 
         if (this.hasSelection()) {
-          const text = this.getSelection();
-          if (text) {
-            this.copyToClipboard(text);
-            this.selectionChangedEmitter.fire();
+          try {
+            const text = this.getSelection();
+            if (text) {
+              this.copyToClipboard(text);
+            }
+          } catch {
+            // getSelection() can fail if WASM render state isn't ready
           }
+          this.selectionChangedEmitter.fire();
         }
       }
     };
@@ -609,11 +621,15 @@ export class SelectionManager {
           this.selectionEnd = { col: word.endCol, absoluteRow };
           this.requestRender();
 
-          const text = this.getSelection();
-          if (text) {
-            this.copyToClipboard(text);
-            this.selectionChangedEmitter.fire();
+          try {
+            const text = this.getSelection();
+            if (text) {
+              this.copyToClipboard(text);
+            }
+          } catch {
+            // getSelection() can fail if WASM render state isn't ready
           }
+          this.selectionChangedEmitter.fire();
         }
       } else if (e.detail >= 3) {
         // Triple-click (or more) - select line content (like native Ghostty)
@@ -650,11 +666,15 @@ export class SelectionManager {
           this.selectionEnd = { col: endCol, absoluteRow };
           this.requestRender();
 
-          const text = this.getSelection();
-          if (text) {
-            this.copyToClipboard(text);
-            this.selectionChangedEmitter.fire();
+          try {
+            const text = this.getSelection();
+            if (text) {
+              this.copyToClipboard(text);
+            }
+          } catch {
+            // getSelection() can fail if WASM render state isn't ready
           }
+          this.selectionChangedEmitter.fire();
         }
       }
     });
@@ -663,7 +683,7 @@ export class SelectionManager {
     // This allows Copy/Paste options to appear in the context menu
     this.boundContextMenuHandler = (e: MouseEvent) => {
       // Position textarea at mouse cursor
-      const canvas = this.renderer.canvas;
+      const canvas = this.renderer.getCanvas();
       const rect = canvas.getBoundingClientRect();
 
       this.textarea.style.position = 'fixed';
@@ -910,11 +930,16 @@ export class SelectionManager {
     const absoluteRow = this.viewportRowToAbsolute(row);
     const scrollbackLength = this.wasmTerm.getScrollbackLength();
     let line: GhosttyCell[] | null;
-    if (absoluteRow < scrollbackLength) {
-      line = this.wasmTerm.getScrollbackLine(absoluteRow);
-    } else {
-      const screenRow = absoluteRow - scrollbackLength;
-      line = this.wasmTerm.getLine(screenRow);
+    try {
+      if (absoluteRow < scrollbackLength) {
+        line = this.wasmTerm.getScrollbackLine(absoluteRow);
+      } else {
+        const screenRow = absoluteRow - scrollbackLength;
+        line = this.wasmTerm.getLine(screenRow);
+      }
+    } catch {
+      // WASM render state can be unavailable outside of render context
+      return null;
     }
     if (!line) return null;
 

@@ -114,3 +114,20 @@ index e017d5f79..c68db764c 100644
              used: bool,
          };
  
+diff --git a/src/terminal/Screen.zig b/src/terminal/Screen.zig
+index 39fdd6109..c42b44bb8 100644
+--- a/src/terminal/Screen.zig
++++ b/src/terminal/Screen.zig
+@@ -881,9 +881,9 @@ pub fn cursorDownScroll(self: *Screen) !void {
+         // Our new row is always dirty
+         self.cursorMarkDirty();
+ 
+-        // Clear the new row so it gets our bg color. We only do this
+-        // if we have a bg color at all.
+-        if (self.cursor.style.bg_color != .none) {
++        // ghostty-web: always clear new rows to prevent stale cell data
++        // bleeding through on transparent backgrounds (bg_color == .none).
++        {
+             const page: *Page = &self.cursor.page_pin.node.data;
+             self.clearCells(
+                 page,

@@ -79,15 +79,3 @@ server {
 ⚠️ **This server provides full shell access.**
 
 Only use for local development and demos. Do not expose to untrusted networks.
-
-## Renderer backends
-
-The demo selects a renderer via the `?renderer=` query string:
-
-- `?renderer=auto` (default) — tries WebGPU first, then WebGL2, then Canvas2D.
-- `?renderer=webgpu` — strict WebGPU; throws if unavailable.
-- `?renderer=webgl` — strict WebGL2; throws if unavailable.
-- `?renderer=canvas2d` — Canvas2D only.
-
-Press **Alt+Shift+R** to cycle through all three backends (webgpu → webgl → canvas2d → webgpu), reloading the page with the new `?renderer=` query string.
-The FPS overlay in the top-right of the terminal shows the active backend.

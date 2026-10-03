@@ -59,9 +59,9 @@ export {
   type GhosttyCell,
   type GhosttyTerminalConfig,
   KeyEncoderOption,
-  type RGB,
   type RenderStateColors,
   type RenderStateCursor,
+  type RGB,
 };
 
 /**
@@ -904,6 +904,7 @@ export class GhosttyTerminal {
   }
 
   free(): void {
+    if (!this.handle) return;
     if (this.callbackRegistry) {
       this.callbackRegistry.instancesByHandle.delete(this.handle);
     }
@@ -920,6 +921,18 @@ export class GhosttyTerminal {
       this.renderHandle = 0;
     }
     this.exports.ghostty_terminal_free(this.handle);
+    this.handle = 0;
+  }
+
+  /**
+   * Update terminal colors at runtime. All color values are applied directly
+   * (no sentinel — 0x000000 is valid black). Forces a full redraw on next render.
+   *
+   * Uses the same ghostty_terminal_set(COLOR_*) path as applyConfig; this
+   * is the runtime variant called by Terminal.setTheme().
+   */
+  setColors(config: GhosttyTerminalConfig): void {
+    this.applyConfig(config);
   }
 
   // ==========================================================================
@@ -1157,6 +1170,13 @@ export class GhosttyTerminal {
     // populator fills the rest each call (layout from ghostty_type_json:
     //   bold@56, italic@57, faint@58, blink@59, inverse@60,
     //   invisible@61, strikethrough@62, overline@63, underline@64 (i32))
+    // Read the terminal's current default fg/bg once per frame. Cells with
+    // no explicit color return INVALID_VALUE for FG_COLOR/BG_COLOR; we fill
+    // them with these resolved defaults so callers always see a valid RGB
+    // triple (matching the behaviour of the old Ghostty 1.2 C API).
+    const defFg = this.rsGetRgb(RenderStateData.COLOR_FOREGROUND);
+    const defBg = this.rsGetRgb(RenderStateData.COLOR_BACKGROUND);
+
     const STYLE_SIZE = 72;
     const u32Ptr = this.exports.ghostty_wasm_alloc_u8_array(4);
     const rgbPtr = this.exports.ghostty_wasm_alloc_u8_array(3);
@@ -1169,15 +1189,6 @@ export class GhosttyTerminal {
     // enum is a 4-byte int.
     const cellRawPtr = this.exports.ghostty_wasm_alloc_u8_array(8);
     const widePtr = this.exports.ghostty_wasm_alloc_u8_array(4);
-    // Scratch for GRAPHEMES_BUF — sized large enough that any realistic
-    // cluster fits in this single allocation and we don't pay alloc/free
-    // per multi-codepoint cell. 32 codepoints covers kitty placeholders
-    // (3-4), the longest standard ZWJ family emoji (~7), and Indic
-    // consonant clusters with comfortable headroom; cells beyond that
-    // fall back to a dynamic alloc below.
-    const GRAPHEME_SCRATCH_CODEPOINTS = 32;
-    const GRAPHEME_SCRATCH_BYTES = GRAPHEME_SCRATCH_CODEPOINTS * 4;
-    const graphemeBufPtr = this.exports.ghostty_wasm_alloc_u8_array(GRAPHEME_SCRATCH_BYTES);
     // Populate the row meta caches as a side effect — saves a redundant
     // iterator walk if the renderer also calls isRowDirty() / isRowWrapped()
     // on this snapshot.
@@ -1229,53 +1240,32 @@ export class GhosttyTerminal {
           cell.grapheme_len = graphemeLen > 0 ? graphemeLen - 1 : 0;
 
           if (graphemeLen > 0) {
-            // GRAPHEMES_BUF writes graphemeLen u32 codepoints. Read into the
-            // shared scratch when the cluster fits; fall back to a dedicated
-            // allocation for the rare jumbo cluster (graphemeLen > 32).
-            // Capturing all codepoints here lets coreEncodeCells /
-            // renderPlaceholderCell consume cell.grapheme directly instead of
-            // calling getGrapheme(y, x) per cell — that path re-walks the row
-            // iterator from row 0 and is O(row) per cell, which used to
-            // dominate the per-frame budget for kitty unicode placeholders.
-            let bufPtr = graphemeBufPtr;
-            let usedDynamic = false;
-            const wantBytes = graphemeLen * 4;
-            if (graphemeLen > GRAPHEME_SCRATCH_CODEPOINTS) {
-              bufPtr = this.exports.ghostty_wasm_alloc_u8_array(wantBytes);
-              usedDynamic = true;
-            }
-            try {
-              this.exports.ghostty_render_state_row_cells_get(
-                this.rowCells,
-                RowCellsData.GRAPHEMES_BUF,
-                bufPtr
-              );
-              const view = new DataView(this.memory.buffer);
-              cell.codepoint = view.getUint32(bufPtr, true);
-              if (graphemeLen > 1) {
-                const extras = new Array<number>(graphemeLen - 1);
-                for (let g = 1; g < graphemeLen; g++) {
-                  extras[g - 1] = view.getUint32(bufPtr + g * 4, true);
-                }
-                cell.grapheme = extras;
-              } else {
-                cell.grapheme = null;
-              }
-            } finally {
-              if (usedDynamic) this.exports.ghostty_wasm_free_u8_array(bufPtr, wantBytes);
-            }
+            // GRAPHEMES_BUF writes graphemeLen u32 codepoints. We only need
+            // the base codepoint here; multi-codepoint clusters go through
+            // getGrapheme() separately.
+            this.exports.ghostty_render_state_row_cells_get(
+              this.rowCells,
+              RowCellsData.GRAPHEMES_BUF,
+              u32Ptr
+            );
+            cell.codepoint = new DataView(this.memory.buffer).getUint32(u32Ptr, true);
           } else {
             cell.codepoint = 0;
-            cell.grapheme = null;
           }
 
           // Resolved fg/bg. Returns INVALID_VALUE (non-zero) when the cell
           // has no explicit color; mark fg/bgIsDefault so the renderer
           // applies the theme default rather than rendering literal black
           // (the rgb triple stays zeroed but is meaningless when isDefault).
-          cell.fg_r = cell.fg_g = cell.fg_b = 0;
-          cell.bg_r = cell.bg_g = cell.bg_b = 0;
+          // Seed defaults: use terminal's resolved fg/bg (matches pre-1.3 behaviour
+          // where the C API returned fully-resolved colours for every cell).
+          cell.fg_r = defFg.r;
+          cell.fg_g = defFg.g;
+          cell.fg_b = defFg.b;
           cell.fgIsDefault = true;
+          cell.bg_r = defBg.r;
+          cell.bg_g = defBg.g;
+          cell.bg_b = defBg.b;
           cell.bgIsDefault = true;
           if (
             this.exports.ghostty_render_state_row_cells_get(
@@ -1376,7 +1366,6 @@ export class GhosttyTerminal {
       this.exports.ghostty_wasm_free_u8_array(stylePtr, STYLE_SIZE);
       this.exports.ghostty_wasm_free_u8_array(cellRawPtr, 8);
       this.exports.ghostty_wasm_free_u8_array(widePtr, 4);
-      this.exports.ghostty_wasm_free_u8_array(graphemeBufPtr, GRAPHEME_SCRATCH_BYTES);
     }
 
     this.rowDirtyCache = dirtyCache;
@@ -1414,7 +1403,6 @@ export class GhosttyTerminal {
       cell.width = 1;
       cell.hyperlink_id = 0;
       cell.grapheme_len = 0;
-      cell.grapheme = null;
     }
   }
 
@@ -1768,7 +1756,6 @@ export class GhosttyTerminal {
       width: 1,
       hyperlink_id: 0,
       grapheme_len: 0,
-      grapheme: null,
     };
   }
 
@@ -1966,7 +1953,6 @@ export class GhosttyTerminal {
           width: 1,
           hyperlink_id: 0,
           grapheme_len: 0,
-          grapheme: null,
         });
       }
     }

@@ -1,7 +1,8 @@
 /**
- * Public API for @cmux/ghostty-terminal
+ * Public API for ghostty-web
  *
- * Main entry point following xterm.js conventions
+ * Main entry point following xterm.js conventions.
+ * For headless mode (no DOM), use 'ghostty-web/headless' instead.
  */
 
 import { Ghostty } from './ghostty';
@@ -54,8 +55,11 @@ export function getGhostty(): Ghostty {
   return ghosttyInstance;
 }
 
-// Main Terminal class
+// Main Terminal class (browser - full functionality)
 export { Terminal } from './terminal';
+
+// Core Terminal class (headless-compatible base)
+export { TerminalCore } from './terminal-core';
 
 // xterm.js-compatible interfaces
 export type {
@@ -68,6 +72,10 @@ export type {
   IBufferRange,
   IKeyEvent,
   IUnicodeVersionProvider,
+  IBufferNamespace,
+  IBuffer,
+  IBufferLine,
+  IBufferCell,
 } from './interfaces';
 
 // Ghostty WASM components (for advanced usage)
@@ -83,16 +91,8 @@ export { Key, KeyAction, Mods } from './types';
 export type { KeyEvent, GhosttyCell, RGB, Cursor, TerminalHandle } from './types';
 
 // Low-level components (for custom integrations)
-export { CanvasRenderer } from './renderer-canvas2d';
-export type {
-  Renderer,
-  RendererBackend,
-  RendererOptions,
-  FontMetrics,
-  IRenderable,
-  IScrollbackProvider,
-  LinkRange,
-} from './renderer-types';
+export { CanvasRenderer } from './renderer';
+export type { RendererOptions, FontMetrics, IRenderable } from './renderer';
 export { InputHandler } from './input-handler';
 export { EventEmitter } from './event-emitter';
 export { SelectionManager } from './selection-manager';
@@ -101,19 +101,11 @@ export type { SelectionCoordinates } from './selection-manager';
 // Addons
 export { FitAddon } from './addons/fit';
 export type { ITerminalDimensions } from './addons/fit';
+export { ImagePasteAddon } from './addons/image-paste';
+export type { IImagePasteData } from './addons/image-paste';
 
 // Link providers
 export { OSC8LinkProvider } from './providers/osc8-link-provider';
 export { UrlRegexProvider } from './providers/url-regex-provider';
 export { LinkDetector } from './link-detector';
 export type { ILink, ILinkProvider, IBufferCellPosition } from './types';
-
-// Renderer factory + WebGPU stub
-export { WebGPURenderer } from './renderer-webgpu';
-export { pickRenderer } from './renderer-factory';
-export { ScrollbarOverlay } from './scrollbar-overlay';
-export { CursorBlink } from './cursor-blink';
-
-// Renderer HUD (active-backend + FPS badge with click + Alt+Shift+R cycling)
-export { installRendererHud, parseRendererFromURL } from './renderer-hud';
-export type { RendererHudOptions } from './renderer-hud';

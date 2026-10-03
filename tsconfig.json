@@ -15,7 +15,7 @@
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["bun-types", "@webgpu/types"]
+    "types": ["bun-types"]
   },
   "include": ["lib/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

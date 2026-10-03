@@ -31,61 +31,33 @@ function findNodeRuntime() {
     const result = spawnSync(
       candidate,
       ['-e', 'process.stdout.write(process.versions.bun ? "bun" : "node")'],
-      {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
     );
-
-    if (result.status === 0 && result.stdout === 'node') {
-      return candidate;
-    }
+    if (result.status === 0 && result.stdout === 'node') return candidate;
   }
-
   return null;
 }
 
 if (process.versions.bun) {
   if (process.env.GHOSTTY_WEB_DEMO_REEXEC === '1') {
     console.error('Error: ghostty-web demo requires Node.js for node-pty.');
-    console.error('Bun re-executed the demo as Bun again; refusing to recurse.');
-    console.error('Run with: node demo/bin/demo.js');
     process.exit(1);
   }
-
   const nodeRuntime = findNodeRuntime();
-
   if (!nodeRuntime) {
     console.error('Error: ghostty-web demo requires Node.js for node-pty.');
-    console.error('Could not find a real Node.js runtime on PATH.');
-    console.error('Run with: node demo/bin/demo.js');
     process.exit(1);
   }
-
   const child = spawn(nodeRuntime, [__filename, ...process.argv.slice(2)], {
     stdio: 'inherit',
-    env: {
-      ...process.env,
-      GHOSTTY_WEB_DEMO_REEXEC: '1',
-    },
+    env: { ...process.env, GHOSTTY_WEB_DEMO_REEXEC: '1' },
   });
-
-  child.on('error', (error) => {
-    console.error('Error: ghostty-web demo requires Node.js for node-pty.');
-    console.error(`Failed to start node: ${error.message}`);
-    process.exit(1);
-  });
-
   const exitCode = await new Promise((resolve) => {
     child.on('exit', (code, signal) => {
-      if (signal) {
-        process.kill(process.pid, signal);
-        return;
-      }
-      resolve(code ?? 0);
+      if (signal) process.kill(process.pid, signal);
+      else resolve(code ?? 0);
     });
   });
-
   process.exit(exitCode);
 }
 
@@ -102,6 +74,10 @@ const [{ default: pty }, { WebSocketServer }] = await Promise.all([
 
 const DEV_MODE = process.argv.includes('--dev');
 const HTTP_PORT = process.env.PORT || (DEV_MODE ? 8000 : 8080);
+// Bind to loopback by default so the PTY is not exposed to the LAN. Users
+// who explicitly want remote access can set HOST=0.0.0.0 (or any address);
+// the Origin allowlist still rejects malicious cross-origin WS upgrades.
+const LISTEN_HOST = process.env.HOST || '127.0.0.1';
 
 // ============================================================================
 // Locate ghostty-web assets
@@ -287,16 +263,9 @@ const HTML_TEMPLATE = `<!doctype html>
 
     <script type="module">
       import { init, Terminal, FitAddon } from '/dist/ghostty-web.js';
+
       await init();
-
-      function parseBackend() {
-        const q = new URLSearchParams(window.location.search).get('renderer');
-        if (q === 'webgpu' || q === 'webgl' || q === 'canvas2d' || q === 'auto') return q;
-        return 'auto';
-      }
-
-      const requested = parseBackend();
-      const baseOpts = {
+      const term = new Terminal({
         cols: 80,
         rows: 24,
         fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
@@ -305,86 +274,15 @@ const HTML_TEMPLATE = `<!doctype html>
           background: '#1e1e1e',
           foreground: '#d4d4d4',
         },
-      };
+      });
+
+      const fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
 
       const container = document.getElementById('terminal');
-
-      // In the demo we degrade explicit backend choices to 'auto' on failure
-      // so the page stays usable when (e.g.) the user disables WebGPU in the
-      // browser. Library consumers get the original throw via pickRenderer().
-      const fitAddon = new FitAddon();
-      async function createAndOpen(rendererChoice) {
-        const t = new Terminal({ ...baseOpts, renderer: rendererChoice });
-        t.loadAddon(fitAddon);
-        await t.open(container);
-        return t;
-      }
-
-      let term;
-      try {
-        term = await createAndOpen(requested);
-      } catch (err) {
-        if (requested !== 'auto') {
-          console.warn('[demo] requested renderer ' + requested + ' failed, falling back to auto:', err);
-          const banner = document.createElement('div');
-          banner.style.cssText =
-            'position: absolute; left: 12px; top: 4px;' +
-            'font: 11px/1.4 monospace; color: #ffbd2e; background: rgba(0,0,0,0.6);' +
-            'padding: 4px 8px; border-radius: 3px; z-index: 10; max-width: 60%;';
-          banner.textContent =
-            'Requested renderer "' + requested + '" unavailable in this browser; using auto.';
-          container.style.position = container.style.position || 'relative';
-          container.appendChild(banner);
-          setTimeout(() => banner.remove(), 6000);
-          term = await createAndOpen('auto');
-        } else {
-          throw err;
-        }
-      }
-
+      await term.open(container);
       fitAddon.fit();
       fitAddon.observeResize(); // Auto-fit when container resizes
-
-      // FPS overlay (top-right corner) showing active renderer + frame rate.
-      (function installFpsOverlay() {
-        const el = document.createElement('div');
-        el.style.cssText =
-          'position: absolute; right: 12px; top: 4px;' +
-          'font: 11px/1 monospace; color: #ccc; background: rgba(0,0,0,0.4);' +
-          'padding: 2px 6px; border-radius: 3px; pointer-events: none; z-index: 10;';
-        container.style.position = container.style.position || 'relative';
-        container.appendChild(el);
-        let frames = 0;
-        let lastTick = performance.now();
-        const tick = () => {
-          frames++;
-          const now = performance.now();
-          if (now - lastTick >= 1000) {
-            el.textContent =
-              (term.renderer && term.renderer.backend ? term.renderer.backend : '?') +
-              '  ' + frames + ' fps';
-            frames = 0;
-            lastTick = now;
-          }
-          requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      })();
-
-      // Alt+Shift+R cycles renderer: webgpu → webgl → canvas2d → webgpu.
-      window.addEventListener('keydown', (e) => {
-        // Use e.code (physical key) rather than e.key — on macOS, holding
-        // Option transforms 'R' into a dead-key character before keydown,
-        // so e.key would never match.
-        if (e.altKey && e.shiftKey && e.code === 'KeyR') {
-          e.preventDefault();
-          const cur = term.renderer ? term.renderer.backend : null;
-          const next = cur === 'webgpu' ? 'webgl' : cur === 'webgl' ? 'canvas2d' : 'webgpu';
-          const url = new URL(window.location.href);
-          url.searchParams.set('renderer', next);
-          window.location.href = url.toString();
-        }
-      });
 
       // Status elements
       const statusDot = document.getElementById('status-dot');
@@ -532,9 +430,17 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
-  // Serve dist files
+  // Serve dist files. path.join with attacker-controlled input would allow
+  // `/dist/../../etc/passwd` to escape distPath, so we resolve the joined
+  // path and require it to stay inside distPath.
   if (pathname.startsWith('/dist/')) {
-    const filePath = path.join(distPath, pathname.slice(6));
+    const filePath = path.resolve(distPath, pathname.slice(6));
+    const distRoot = path.resolve(distPath) + path.sep;
+    if (!filePath.startsWith(distRoot) && filePath !== path.resolve(distPath)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('Forbidden');
+      return;
+    }
     serveFile(filePath, res);
     return;
   }
@@ -600,13 +506,47 @@ function createPtySession(cols, rows) {
 // WebSocket server attached to HTTP server (same port)
 const wss = new WebSocketServer({ noServer: true });
 
+// Allowlist of WebSocket Origins. Without this, ANY web page the user
+// visits while the demo is running can open a WebSocket to /ws and send
+// arbitrary commands to their shell (RCE via cross-origin WS). Browsers
+// always send an Origin header on WS upgrades; missing/empty Origin is
+// rejected too (curl-style direct clients are not a demo use case).
+function isOriginAllowed(origin, expectedHost, expectedPort) {
+  if (!origin) return false;
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+  // If the user explicitly opted in to remote access (HOST=0.0.0.0), accept
+  // the host they actually browsed from — but still only on the exact port.
+  if (expectedHost === '0.0.0.0' || expectedHost === '::') {
+    allowedHosts.add(parsed.hostname);
+  }
+  if (!allowedHosts.has(parsed.hostname)) return false;
+  // Default port handling: http → 80, https → 443, otherwise URL exposes it
+  const parsedPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+  return parsedPort === String(expectedPort);
+}
+
 // Handle HTTP upgrade for WebSocket connections
 httpServer.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (url.pathname === '/ws') {
-    // In production, consider validating req.headers.origin to prevent CSRF
-    // For development/demo purposes, we allow all origins
+    const origin = req.headers.origin;
+    if (!isOriginAllowed(origin, LISTEN_HOST, HTTP_PORT)) {
+      console.warn(
+        `[demo] Rejected WebSocket upgrade from origin ${JSON.stringify(origin)} ` +
+          `(expected localhost:${HTTP_PORT}). See README about HOST=0.0.0.0.`
+      );
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
     });
@@ -740,6 +680,7 @@ if (DEV_MODE) {
   const vite = await createServer({
     root: repoRoot,
     server: {
+      host: LISTEN_HOST,
       port: HTTP_PORT,
       strictPort: true,
     },
@@ -757,6 +698,16 @@ if (DEV_MODE) {
       // ONLY handle /ws - everything else passes through unchanged to Vite
       if (pathname === '/ws') {
         if (!socket.destroyed && !socket.readableEnded) {
+          const origin = req.headers.origin;
+          if (!isOriginAllowed(origin, LISTEN_HOST, HTTP_PORT)) {
+            console.warn(
+              `[demo] Rejected WebSocket upgrade from origin ${JSON.stringify(origin)} ` +
+                `(expected localhost:${HTTP_PORT}). See README about HOST=0.0.0.0.`
+            );
+            socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+            socket.destroy();
+            return;
+          }
           wss.handleUpgrade(req, socket, head, (ws) => {
             wss.emit('connection', ws, req);
           });
@@ -774,8 +725,10 @@ if (DEV_MODE) {
 
   printBanner(`http://localhost:${HTTP_PORT}/demo/`);
 } else {
-  // Production mode: static file server
-  httpServer.listen(HTTP_PORT, () => {
+  // Production mode: static file server. Bind explicitly to LISTEN_HOST so
+  // the PTY is not exposed to the LAN unless the operator opted in via
+  // HOST=0.0.0.0.
+  httpServer.listen(HTTP_PORT, LISTEN_HOST, () => {
     printBanner(`http://localhost:${HTTP_PORT}`);
   });
 }
