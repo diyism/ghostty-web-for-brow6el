@@ -286,7 +286,8 @@ const HTML_TEMPLATE = `<!doctype html>
     </div>
 
     <script type="module">
-      import { Terminal, FitAddon } from '/dist/ghostty-web.js';
+      import { init, Terminal, FitAddon } from '/dist/ghostty-web.js';
+      await init();
 
       function parseBackend() {
         const q = new URLSearchParams(window.location.search).get('renderer');
