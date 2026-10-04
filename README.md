@@ -312,3 +312,43 @@ At Coder we're big fans of Ghostty, so kudos to that team for all the amazing wo
 ## License
 
 [MIT](./LICENSE)
+## Debian Quick Start
+
+On a fresh Debian system:
+
+```bash
+sudo apt update
+sudo apt install -y git curl ca-certificates xz-utils build-essential
+
+git clone https://github.com/diyism/ghostty-web-for-brow6el.git
+cd ghostty-web-for-brow6el
+
+# Install Bun, then reload the shell so bun is on PATH.
+curl -fsSL https://bun.sh/install | bash
+source "$HOME/.bashrc"
+
+# This fork requires Zig 0.15.2 to build the Ghostty WASM module.
+curl -LO https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
+tar -xf zig-x86_64-linux-0.15.2.tar.xz
+export PATH="$PWD/zig-x86_64-linux-0.15.2:$PATH"
+
+bun install
+(cd demo && bun install)
+bun run build
+```
+
+Start the demo server locally:
+
+```bash
+PORT=7001 bun --bun run demo
+```
+
+To run a second instance, use another terminal in the same checkout:
+
+```bash
+PORT=7002 bun --bun run demo
+```
+
+Open `http://localhost:7001` or `http://localhost:7002` in a browser.
+
+================

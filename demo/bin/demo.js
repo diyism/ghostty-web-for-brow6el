@@ -151,20 +151,20 @@ const HTML_TEMPLATE = `<!doctype html>
 
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 40px 20px;
+        background: #1e1e1e;
+        width: 100%;
+        height: 100dvh;
+        min-height: 100dvh;
+        overflow: hidden;
       }
 
       .terminal-window {
         width: 100%;
-        max-width: 1000px;
+        height: 100dvh;
+        min-height: 100dvh;
         background: #1e1e1e;
-        border-radius: 12px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
       }
 
@@ -225,7 +225,8 @@ const HTML_TEMPLATE = `<!doctype html>
       }
 
       .terminal-content {
-        height: 600px;
+        flex: 1 1 auto;
+        min-height: 0;
         padding: 16px;
         background: #1e1e1e;
         position: relative;
@@ -237,11 +238,6 @@ const HTML_TEMPLATE = `<!doctype html>
         display: block;
       }
 
-      @media (max-width: 768px) {
-        .terminal-content {
-          height: 500px;
-        }
-      }
     </style>
   </head>
   <body>
@@ -371,27 +367,7 @@ const HTML_TEMPLATE = `<!doctype html>
 
       // Handle mobile keyboard showing/hiding using visualViewport API
       if (window.visualViewport) {
-        const terminalContent = document.querySelector('.terminal-content');
-        const terminalWindow = document.querySelector('.terminal-window');
-        const originalHeight = terminalContent.style.height;
-        const body = document.body;
-
         window.visualViewport.addEventListener('resize', () => {
-          const keyboardHeight = window.innerHeight - window.visualViewport.height;
-          if (keyboardHeight > 100) {
-            body.style.padding = '0';
-            body.style.alignItems = 'flex-start';
-            terminalWindow.style.borderRadius = '0';
-            terminalWindow.style.maxWidth = '100%';
-            terminalContent.style.height = (window.visualViewport.height - 60) + 'px';
-            window.scrollTo(0, 0);
-          } else {
-            body.style.padding = '40px 20px';
-            body.style.alignItems = 'center';
-            terminalWindow.style.borderRadius = '12px';
-            terminalWindow.style.maxWidth = '1000px';
-            terminalContent.style.height = originalHeight || '600px';
-          }
           fitAddon.fit();
         });
       }
