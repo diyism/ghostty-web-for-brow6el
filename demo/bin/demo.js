@@ -280,6 +280,14 @@ const HTML_TEMPLATE = `<!doctype html>
       fitAddon.fit();
       fitAddon.observeResize(); // Auto-fit when container resizes
 
+      // The first fit can run before the full-viewport layout has painted.
+      // Fit again before creating the PTY so its initial size matches the
+      // visible browser area instead of falling back to 80x24.
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      fitAddon.fit();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      fitAddon.fit();
+
       // Status elements
       const statusDot = document.getElementById('status-dot');
       const statusText = document.getElementById('status-text');
