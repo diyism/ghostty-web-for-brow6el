@@ -1,3 +1,6 @@
+ghostty-web for terminal-browser, see terminal-browser.sh:
+https://gist.github.com/diyism/d00c6bbc08b1a55208c6731da61a6277#file-muse-ai-container_sshdog_cloudflared-access-tcp_terminal-browser-txt-L163
+
 ## Debian Quick Start
 
 On a fresh Debian system:
