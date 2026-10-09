@@ -86,6 +86,16 @@ const LISTEN_HOST = process.env.HOST || '127.0.0.1';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
+function findJsFile(distPath) {
+  // Vite emits ghostty-web.es.js (see vite.config.js / package.json
+  // "exports"); ghostty-web.js is an alias produced by build:lib-copy.
+  // Accept either so `bun run build:lib` alone is enough to run the demo.
+  for (const name of ['ghostty-web.js', 'ghostty-web.es.js']) {
+    if (fs.existsSync(path.join(distPath, name))) return name;
+  }
+  return null;
+}
+
 function findGhosttyWeb() {
   // In dev mode, we use Vite - no need to find built assets
   if (DEV_MODE) {
@@ -96,16 +106,21 @@ function findGhosttyWeb() {
       console.error('Run: bun run build:wasm');
       process.exit(1);
     }
-    return { distPath: null, wasmPath, repoRoot };
+    return { distPath: null, wasmPath, repoRoot, jsFile: 'ghostty-web.es.js' };
   }
 
   // First, check for local development (repo root dist/)
   const localDist = path.join(__dirname, '..', '..', 'dist');
-  const localJs = path.join(localDist, 'ghostty-web.js');
+  const localJsFile = findJsFile(localDist);
   const localWasm = path.join(__dirname, '..', '..', 'ghostty-vt.wasm');
 
-  if (fs.existsSync(localJs) && fs.existsSync(localWasm)) {
-    return { distPath: localDist, wasmPath: localWasm, repoRoot: path.join(__dirname, '..', '..') };
+  if (localJsFile && fs.existsSync(localWasm)) {
+    return {
+      distPath: localDist,
+      wasmPath: localWasm,
+      repoRoot: path.join(__dirname, '..', '..'),
+      jsFile: localJsFile,
+    };
   }
 
   // Use require.resolve to find the installed ghostty-web package
@@ -116,8 +131,9 @@ function findGhosttyWeb() {
     const distPath = path.join(ghosttyWebRoot, 'dist');
     const wasmPath = path.join(ghosttyWebRoot, 'ghostty-vt.wasm');
 
-    if (fs.existsSync(path.join(distPath, 'ghostty-web.js')) && fs.existsSync(wasmPath)) {
-      return { distPath, wasmPath, repoRoot: null };
+    const jsFile = findJsFile(distPath);
+    if (jsFile && fs.existsSync(wasmPath)) {
+      return { distPath, wasmPath, repoRoot: null, jsFile };
     }
   } catch (e) {
     // require.resolve failed, package not found
@@ -130,7 +146,7 @@ function findGhosttyWeb() {
   process.exit(1);
 }
 
-const { distPath, wasmPath, repoRoot } = findGhosttyWeb();
+const { distPath, wasmPath, repoRoot, jsFile } = findGhosttyWeb();
 
 // ============================================================================
 // HTML Template
@@ -258,7 +274,7 @@ const HTML_TEMPLATE = `<!doctype html>
     </div>
 
     <script type="module">
-      import { init, Terminal, FitAddon } from '/dist/ghostty-web.js';
+      import { init, Terminal, FitAddon } from '/dist/${jsFile}';
 
       await init();
       const term = new Terminal({
@@ -495,6 +511,43 @@ const wss = new WebSocketServer({ noServer: true });
 // arbitrary commands to their shell (RCE via cross-origin WS). Browsers
 // always send an Origin header on WS upgrades; missing/empty Origin is
 // rejected too (curl-style direct clients are not a demo use case).
+//
+// Explicit opt-in for public / reverse-proxied deployments, where the
+// browser Origin (e.g. https://demo.example.com, port 443) cannot match
+// the port the demo itself listens on (e.g. 8080 behind a tunnel):
+//   GHOSTTY_ALLOWED_ORIGINS=https://demo.example.com,https://a.example.com:8443
+//   GHOSTTY_ALLOWED_HOSTS=demo.example.com,a.example.com:8443  (alias)
+// Entries may be full origins (exact protocol+host+port match) or bare
+// hosts / host:port (hostname match, port too when given). Nothing is
+// allowed implicitly: an entry only ever adds the origins the operator
+// listed, so the localhost default stays closed.
+const EXTRA_ALLOWED_ORIGINS = (
+  process.env.GHOSTTY_ALLOWED_ORIGINS ||
+  process.env.GHOSTTY_ALLOWED_HOSTS ||
+  ''
+)
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function isExplicitlyAllowed(parsed, parsedPort) {
+  for (const entry of EXTRA_ALLOWED_ORIGINS) {
+    if (entry.includes('://')) {
+      try {
+        if (new URL(entry).origin === parsed.origin) return true;
+      } catch {
+        // ignore a malformed allowlist entry
+      }
+    } else if (entry.includes(':') && !entry.startsWith('[')) {
+      const [host, port] = entry.split(':');
+      if (parsed.hostname === host && parsedPort === port) return true;
+    } else if (parsed.hostname === entry) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isOriginAllowed(origin, expectedHost, expectedPort) {
   if (!origin) return false;
   let parsed;
@@ -504,6 +557,9 @@ function isOriginAllowed(origin, expectedHost, expectedPort) {
     return false;
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  // Default port handling: http → 80, https → 443, otherwise URL exposes it
+  const parsedPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+  if (isExplicitlyAllowed(parsed, parsedPort)) return true;
   const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
   // If the user explicitly opted in to remote access (HOST=0.0.0.0), accept
   // the host they actually browsed from — but still only on the exact port.
@@ -511,8 +567,6 @@ function isOriginAllowed(origin, expectedHost, expectedPort) {
     allowedHosts.add(parsed.hostname);
   }
   if (!allowedHosts.has(parsed.hostname)) return false;
-  // Default port handling: http → 80, https → 443, otherwise URL exposes it
-  const parsedPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
   return parsedPort === String(expectedPort);
 }
 
@@ -525,7 +579,7 @@ httpServer.on('upgrade', (req, socket, head) => {
     if (!isOriginAllowed(origin, LISTEN_HOST, HTTP_PORT)) {
       console.warn(
         `[demo] Rejected WebSocket upgrade from origin ${JSON.stringify(origin)} ` +
-          `(expected localhost:${HTTP_PORT}). See README about HOST=0.0.0.0.`
+          `(expected localhost:${HTTP_PORT}). See README about HOST=0.0.0.0 / GHOSTTY_ALLOWED_ORIGINS.`
       );
       socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
       socket.destroy();
@@ -686,7 +740,7 @@ if (DEV_MODE) {
           if (!isOriginAllowed(origin, LISTEN_HOST, HTTP_PORT)) {
             console.warn(
               `[demo] Rejected WebSocket upgrade from origin ${JSON.stringify(origin)} ` +
-                `(expected localhost:${HTTP_PORT}). See README about HOST=0.0.0.0.`
+                `(expected localhost:${HTTP_PORT}). See README about HOST=0.0.0.0 / GHOSTTY_ALLOWED_ORIGINS.`
             );
             socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
             socket.destroy();

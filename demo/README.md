@@ -31,6 +31,35 @@ PORT=3000 npx @ghostty-web/demo@next
 
 Then open http://localhost:8080 in your browser.
 
+## WebSocket Origin allowlist
+
+The `/ws` upgrade checks the browser `Origin` against an allowlist —
+without it, any web page could open a WebSocket to the demo and drive
+your shell. By default only `localhost` / `127.0.0.1` / `[::1]` on the
+exact `PORT` the demo listens on is allowed.
+
+That default rejects public deployments where the browser Origin's port
+differs from `PORT` — e.g. a tunnel / reverse proxy terminating HTTPS
+on 443 in front of a demo listening on 8080. The page loads, but every
+WebSocket upgrade gets `403` and the client loops on
+"Connection closed. Reconnecting".
+
+Do **not** work around this by forcing `PORT=443`. Instead list the
+public origins explicitly:
+
+```bash
+HOST=0.0.0.0 PORT=8080 \
+GHOSTTY_ALLOWED_ORIGINS=https://demo.example.com \
+  npx @ghostty-web/demo@next
+```
+
+`GHOSTTY_ALLOWED_ORIGINS` (alias: `GHOSTTY_ALLOWED_HOSTS`) is a
+comma-separated list. Entries may be full origins
+(`https://demo.example.com`, `https://demo.example.com:8443` — exact
+protocol + host + port match) or bare hosts (`demo.example.com`,
+`demo.example.com:8443` — hostname match, port too when given).
+Nothing unlisted is allowed.
+
 ## Reverse Proxy Support
 
 The server now supports reverse proxies like ngrok, nginx, and others by:
